@@ -548,7 +548,11 @@ public class StormObject {
 		currentTopYBlock = world.getHeightValue(MathHelper.floor_double(pos.xCoord), MathHelper.floor_double(pos.zCoord));
 		//Weather.dbg("currentTopYBlock: " + currentTopYBlock);
 		if (levelCurIntensityStage >= STATE_THUNDER) {
-			if (rand.nextInt((int)Math.max(1, ConfigMisc.Storm_LightningStrikeBaseValueOddsTo1 - (levelCurIntensityStage * 10))) == 0) {
+			int lightningOdds = (int)Math.max(1, ConfigMisc.Storm_LightningStrikeBaseValueOddsTo1 - (levelCurIntensityStage * 10));
+			// NTNH start: Eve hardcore weather profile
+			lightningOdds = weather2.util.WeatherEveHelper.getAdjustedLightningOdds(lightningOdds, this);
+			// NTNH end
+			if (rand.nextInt(lightningOdds) == 0) {
 				int x = (int) (pos.xCoord + rand.nextInt(size) - rand.nextInt(size));
 				int z = (int) (pos.zCoord + rand.nextInt(size) - rand.nextInt(size));
 				int y = world.getPrecipitationHeight(x, z);
@@ -941,11 +945,25 @@ public class StormObject {
 			//actual storm formation chance
 			
 			if (((ConfigMisc.overcastMode && manager.getWorld().isRaining()) || !ConfigMisc.overcastMode) && WeatherUtilConfig.listDimensionsStorms.contains(manager.getWorld().provider.dimensionId) && ConfigMisc.Player_Storm_Deadly_TimeBetweenInTicks != -1) {
-				if (lastStormDeadlyTime == 0 || lastStormDeadlyTime + ConfigMisc.Player_Storm_Deadly_TimeBetweenInTicks < world.getTotalWorldTime()) {
+				int timeBetween = weather2.util.WeatherEveHelper.getDeadlyTimeBetween(ConfigMisc.Player_Storm_Deadly_TimeBetweenInTicks, this);
+				if (lastStormDeadlyTime == 0 || lastStormDeadlyTime + timeBetween < world.getTotalWorldTime()) {
 					int stormFrontCollideDist = ConfigMisc.Storm_Deadly_CollideDistance;
 					int randomChanceOfCollide = ConfigMisc.Player_Storm_Deadly_OddsTo1;
 					
-					if (isInOcean && rand.nextInt(ConfigMisc.Storm_OddsTo1OfOceanBasedStorm) == 0) {
+					int oceanOdds = weather2.util.WeatherEveHelper.getOceanStormOdds(ConfigMisc.Storm_OddsTo1OfOceanBasedStorm, this);
+					int landOdds = weather2.util.WeatherEveHelper.getLandStormOdds(ConfigMisc.Storm_OddsTo1OfLandBasedStorm, this);
+					
+					if (isInOcean && oceanOdds > 0 && rand.nextInt(oceanOdds) == 0) {
+						EntityPlayer entP = world.getPlayerEntityByName(userSpawnedFor);
+						
+						if (entP != null) {
+							initRealStorm(entP, null);
+						} else {
+							initRealStorm(null, null);
+						}
+						
+						playerNBT.setLong("lastStormDeadlyTime", world.getTotalWorldTime());
+					} else if (!isInOcean && landOdds > 0 && rand.nextInt(landOdds) == 0) {
 						EntityPlayer entP = world.getPlayerEntityByName(userSpawnedFor);
 						
 						if (entP != null) {
@@ -1178,6 +1196,9 @@ public class StormObject {
 			}
 			
 		}
+		// NTNH start: Eve hardcore weather profile
+		weather2.util.WeatherEveHelper.onInitRealStorm(this);
+		// NTNH end
 	}
 	
 	public void aimStormAtClosestOrProvidedPlayer(EntityPlayer entP) {
