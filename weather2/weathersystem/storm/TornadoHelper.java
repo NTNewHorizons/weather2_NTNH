@@ -12,6 +12,7 @@ import CoroUtil.OldUtil;
 import weather2.Weather;
 import weather2.config.ConfigMisc;
 import weather2.entity.EntityMovingBlock;
+import weather2.util.WeatherEveHelper;
 import weather2.util.WeatherUtil;
 import weather2.util.WeatherUtilEntity;
 import weather2.util.WeatherUtilSound;
@@ -98,7 +99,7 @@ public class TornadoHelper {
         //int spawnYOffset = (int) storm.currentTopYBlock;
         int spawnYOffset = (int) storm.posBaseFormationPos.yCoord;
 
-        if (!parWorld.isRemote && ConfigMisc.Storm_Tornado_grabBlocks/*getStorm().grabsBlocks*/)
+        if (!parWorld.isRemote && WeatherEveHelper.canTornadoGrabBlocks(storm)/*getStorm().grabsBlocks*/)
         {
             int yStart = 00;
             int yEnd = (int)storm.pos.yCoord/* + 72*/;
@@ -267,7 +268,7 @@ public class TornadoHelper {
 
 	public boolean tryRip(World parWorld, int tryX, int tryY, int tryZ, boolean notify)
     {
-        if (!ConfigMisc.Storm_Tornado_grabBlocks) return true;
+        if (!WeatherEveHelper.canTornadoGrabBlocks(storm)) return true;
         
         if (isNoDigCoord(tryX, tryY, tryZ)) return true;
         

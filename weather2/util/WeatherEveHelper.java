@@ -2,11 +2,11 @@ package weather2.util;
 
 import weather2.weathersystem.storm.StormObject;
 import weather2.weathersystem.WeatherManagerBase;
+import weather2.config.ConfigMisc;
 
 /**
- * NTNH helper for Eve (Dimension 18) hardcore climate profile.
- * Implements extreme supercell progression, hyper-frequent lightning,
- * and minimal storm cooldowns while strictly enforcing performance guardrails.
+ * NTNH helper for Eve (Dimension 18) hardcore climate profile
+ * and planetary tornado destruction management.
  */
 public class WeatherEveHelper {
     public static boolean isEve(StormObject so) {
@@ -53,5 +53,18 @@ public class WeatherEveHelper {
             return Math.max(5, defaultOdds / 3);
         }
         return defaultOdds;
+    }
+
+    /**
+     * Determines whether a tornado can rip/grab blocks.
+     * Blocks are destructible ONLY on celestial planets (Duna, Eve, Laythe, Tekto).
+     * Overworld (dim 0) is unconditionally protected and immune.
+     */
+    public static boolean canTornadoGrabBlocks(StormObject so) {
+        if (!ConfigMisc.Storm_Tornado_grabBlocks) return false;
+        if (so == null || so.manager == null) return false;
+        // Overworld (Earth, dim 0) is strictly immune
+        if (so.manager.dim == 0) return false;
+        return true;
     }
 }
