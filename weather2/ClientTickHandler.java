@@ -82,6 +82,8 @@ public class ClientTickHandler implements ITickHandler
 
     public void onRenderScreenTick()
     {
+        // NTNH start: disable intrusive pause menu button, access via /weather2 config
+        /*
     	Minecraft mc = FMLClientHandler.instance().getClient();
     	if (mc.currentScreen instanceof GuiIngameMenu) {
     		ScaledResolution scaledresolution = new ScaledResolution(mc.gameSettings, mc.displayWidth, mc.displayHeight);
@@ -98,6 +100,8 @@ public class ClientTickHandler implements ITickHandler
     			}
     		}
     	}
+        */
+        // NTNH end
     }
 
     public void onTickInGUI(GuiScreen guiscreen)
