@@ -5,14 +5,25 @@ import weather2.weathersystem.WeatherManagerBase;
 import weather2.config.ConfigMisc;
 
 /**
- * NTNH helper for Eve (Dimension 18) hardcore climate profile
- * and planetary tornado destruction management.
+ * NTNH helper for Eve (dim 18) and Tekto (dim 24) climate profiles,
+ * audio calibration, and planetary tornado block destruction safety.
  */
 public class WeatherEveHelper {
+
+    public static final int DIM_OVERWORLD = 0;
+    public static final int DIM_DUNA = 16;
+    public static final int DIM_EVE = 18;
+    public static final int DIM_LAYTHE = 22;
+    public static final int DIM_TEKTO = 24;
+
     public static boolean isEve(StormObject so) {
-        return so != null && so.manager != null && so.manager.dim == 18;
+        return so != null && so.manager != null && so.manager.dim == DIM_EVE;
     }
-    
+
+    public static boolean isTekto(StormObject so) {
+        return so != null && so.manager != null && so.manager.dim == DIM_TEKTO;
+    }
+
     public static void onInitRealStorm(StormObject so) {
         if (isEve(so)) {
             so.alwaysProgresses = true;
@@ -20,52 +31,60 @@ public class WeatherEveHelper {
             if (so.levelCurIntensityStage < StormObject.STATE_HIGHWIND) {
                 so.levelCurIntensityStage = StormObject.STATE_HIGHWIND;
             }
+        } else if (isTekto(so)) {
+            // NTNH: Tekto storm intensity capped at Stage 4 (F4)
+            if (so.maxIntensityStage > StormObject.STATE_STAGE4) {
+                so.maxIntensityStage = StormObject.STATE_STAGE4;
+            }
         }
     }
-    
+
     public static int getAdjustedLightningOdds(int baseOdds, StormObject so) {
         if (isEve(so)) {
             // 6x more frequent lightning on Eve, with safe clamp to avoid network packet floods
             return Math.max(15, baseOdds / 6);
+        } else if (isTekto(so)) {
+            // 2x more frequent dry lightning on Tekto
+            return Math.max(1, baseOdds / 2);
         }
         return Math.max(1, baseOdds);
     }
-    
+
     public static int getDeadlyTimeBetween(int defaultTicks, StormObject so) {
         if (isEve(so)) {
-            // 40 seconds (800 ticks) cooldown on Eve instead of 2 minutes (2400 ticks)
+            // 40 seconds (800 ticks) cooldown on Eve instead of 90 seconds (1800 ticks)
             return Math.min(defaultTicks, 800);
         }
         return defaultTicks;
     }
-    
+
     public static int getLandStormOdds(int defaultOdds, StormObject so) {
         if (isEve(so)) {
-            // 3x faster spontaneous land storm formation on Eve
-            return Math.max(5, defaultOdds / 3);
+            // 3x faster spontaneous land storm formation on Eve (1 in 3 when base is 10)
+            return Math.max(1, defaultOdds / 3);
         }
         return defaultOdds;
     }
-    
+
     public static int getOceanStormOdds(int defaultOdds, StormObject so) {
         if (isEve(so)) {
-            // 3x faster ocean cyclones on Eve
-            return Math.max(5, defaultOdds / 3);
+            // 3x faster ocean cyclones on Eve (1 in 7 when base is 20)
+            return Math.max(1, defaultOdds / 3);
         }
         return defaultOdds;
     }
 
     /**
      * Determines whether a tornado can rip/grab blocks.
-     * Blocks are destructible ONLY on celestial planets (Duna, Eve, Laythe, Tekto).
-     * Overworld (dim 0) is unconditionally protected and immune.
+     * Blocks are destructible ONLY on celestial planets with atmosphere:
+     * Duna (16), Eve (18), Laythe (22), Tekto (24).
+     * Overworld (0), Nether (-1), and all vacuum celestial bodies are strictly immune.
      */
     public static boolean canTornadoGrabBlocks(StormObject so) {
         if (!ConfigMisc.Storm_Tornado_grabBlocks) return false;
         if (so == null || so.manager == null) return false;
-        // Overworld (Earth, dim 0) is strictly immune
-        if (so.manager.dim == 0) return false;
-        return true;
+        int dim = so.manager.dim;
+        return dim == DIM_DUNA || dim == DIM_EVE || dim == DIM_LAYTHE || dim == DIM_TEKTO;
     }
 
     /**

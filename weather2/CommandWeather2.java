@@ -35,15 +35,7 @@ public class CommandWeather2 extends CommandBase {
 					return;
 				}
 				
-				if (var2[0].equalsIgnoreCase("kill") || var2[0].equalsIgnoreCase("killall") || var2[0].equalsIgnoreCase("clear")) {
-					var2 = new String[] { "storm", "killall" };
-				} else if ((var2[0].equalsIgnoreCase("spawn") || var2[0].equalsIgnoreCase("create")) && var2.length > 1) {
-					String[] newArgs = new String[var2.length + 1];
-					newArgs[0] = "storm";
-					newArgs[1] = "create";
-					System.arraycopy(var2, 1, newArgs, 2, var2.length - 1);
-					var2 = newArgs;
-				}
+				var2 = weather2.util.WeatherEveHelper.normalizeCommandArgs(var2);
 				// NTNH end
 				
 				if (var2[0].equals("volcano")) {

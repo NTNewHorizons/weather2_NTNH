@@ -945,6 +945,7 @@ public class StormObject {
 			//actual storm formation chance
 			
 			if (((ConfigMisc.overcastMode && manager.getWorld().isRaining()) || !ConfigMisc.overcastMode) && WeatherUtilConfig.listDimensionsStorms.contains(manager.getWorld().provider.dimensionId) && ConfigMisc.Player_Storm_Deadly_TimeBetweenInTicks != -1) {
+				// NTNH start: deadly storm cooldown and planetary spontaneous odds
 				int timeBetween = weather2.util.WeatherEveHelper.getDeadlyTimeBetween(ConfigMisc.Player_Storm_Deadly_TimeBetweenInTicks, this);
 				if (lastStormDeadlyTime == 0 || lastStormDeadlyTime + timeBetween < world.getTotalWorldTime()) {
 					int stormFrontCollideDist = ConfigMisc.Storm_Deadly_CollideDistance;
@@ -973,7 +974,9 @@ public class StormObject {
 						}
 						
 						playerNBT.setLong("lastStormDeadlyTime", world.getTotalWorldTime());
-					} else if (rand.nextInt(randomChanceOfCollide) == 0) {
+					}
+					// NTNH end
+					else if (rand.nextInt(randomChanceOfCollide) == 0) {
 						for (int i = 0; i < manager.getStormObjects().size(); i++) {
 							StormObject so = manager.getStormObjects().get(i);
 							
@@ -1524,21 +1527,14 @@ public class StormObject {
                  //fade spout blue to grey
                  // NTNH start: include tropical cyclones in water-fade gradient
                  if (levelCurIntensityStage == STATE_HIGHWIND || stormType == TYPE_WATER) {
+                	 int fadingDistStart = 30;
+                	 if (ent.posY > posGround.yCoord + fadingDistStart) {
+		                 float maxVal = ent.getBlueColorF();
+		                 float fadeRate = 0.002F;
+		                 ent.setRBGColorF(Math.min(maxVal, ent.getRedColorF()+fadeRate), Math.min(maxVal, ent.getGreenColorF()+fadeRate), maxVal);
+                	 }
+                 }
                  // NTNH end
-                	 int fadingDistStart = 30;
-                	 if (ent.posY > posGround.yCoord + fadingDistStart) {
-		                 float maxVal = ent.getBlueColorF();
-		                 float fadeRate = 0.002F;
-		                 ent.setRBGColorF(Math.min(maxVal, ent.getRedColorF()+fadeRate), Math.min(maxVal, ent.getGreenColorF()+fadeRate), maxVal);
-                	 }
-                 }
-                	 int fadingDistStart = 30;
-                	 if (ent.posY > posGround.yCoord + fadingDistStart) {
-		                 float maxVal = ent.getBlueColorF();
-		                 float fadeRate = 0.002F;
-		                 ent.setRBGColorF(Math.min(maxVal, ent.getRedColorF()+fadeRate), Math.min(maxVal, ent.getGreenColorF()+fadeRate), maxVal);
-                	 }
-                 }
                  
                  spinEntity(ent);
 			}

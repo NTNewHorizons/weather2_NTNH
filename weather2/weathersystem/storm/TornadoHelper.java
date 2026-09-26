@@ -12,6 +12,7 @@ import CoroUtil.OldUtil;
 import weather2.Weather;
 import weather2.config.ConfigMisc;
 import weather2.entity.EntityMovingBlock;
+// NTNH: planetary block grab permissions
 import weather2.util.WeatherEveHelper;
 import weather2.util.WeatherUtil;
 import weather2.util.WeatherUtilEntity;
@@ -99,7 +100,9 @@ public class TornadoHelper {
         //int spawnYOffset = (int) storm.currentTopYBlock;
         int spawnYOffset = (int) storm.posBaseFormationPos.yCoord;
 
+        // NTNH start: check planetary grab permissions
         if (!parWorld.isRemote && WeatherEveHelper.canTornadoGrabBlocks(storm)/*getStorm().grabsBlocks*/)
+        // NTNH end
         {
             int yStart = 00;
             int yEnd = (int)storm.pos.yCoord/* + 72*/;
@@ -268,7 +271,9 @@ public class TornadoHelper {
 
 	public boolean tryRip(World parWorld, int tryX, int tryY, int tryZ, boolean notify)
     {
+        // NTNH start: check planetary block grabbing permissions
         if (!WeatherEveHelper.canTornadoGrabBlocks(storm)) return true;
+        // NTNH end
         
         if (isNoDigCoord(tryX, tryY, tryZ)) return true;
         
