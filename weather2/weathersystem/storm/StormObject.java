@@ -1448,7 +1448,9 @@ public class StormObject {
 		}
 		
 		//spawn funnel
-		if (isTornadoFormingOrGreater() || (attrib_waterSpout)) {
+		// NTNH start: render visible rotating funnels for cyclones as well
+		if (isTornadoFormingOrGreater() || isCycloneFormingOrGreater() || (attrib_waterSpout)) {
+		// NTNH end
 			if (this.manager.getWorld().getTotalWorldTime() % (delay + ConfigMisc.Storm_ParticleSpawnDelay) == 0) {
 				for (int i = 0; i < loopSize; i++) {
 					//temp comment out
@@ -1485,6 +1487,11 @@ public class StormObject {
 							if (levelCurIntensityStage == STATE_HIGHWIND) {
 								particle.particleScale = 150;
 								particle.setRBGColorF(finalBright-0.2F, finalBright-0.2F, finalBright);
+							// NTNH start: oceanic water-mist styling for tropical cyclones
+							} else if (stormType == TYPE_WATER) {
+								particle.particleScale = 280;
+								particle.setRBGColorF(Math.max(0.1F, finalBright - 0.08F), Math.max(0.1F, finalBright - 0.04F), Math.min(1.0F, finalBright + 0.12F));
+							// NTNH end
 							} else {
 								particle.particleScale = 250;
 								particle.setRBGColorF(finalBright, finalBright, finalBright);
@@ -1515,7 +1522,16 @@ public class StormObject {
                  ent.rotationPitch = -30F;
                  
                  //fade spout blue to grey
-                 if (levelCurIntensityStage == STATE_HIGHWIND) {
+                 // NTNH start: include tropical cyclones in water-fade gradient
+                 if (levelCurIntensityStage == STATE_HIGHWIND || stormType == TYPE_WATER) {
+                 // NTNH end
+                	 int fadingDistStart = 30;
+                	 if (ent.posY > posGround.yCoord + fadingDistStart) {
+		                 float maxVal = ent.getBlueColorF();
+		                 float fadeRate = 0.002F;
+		                 ent.setRBGColorF(Math.min(maxVal, ent.getRedColorF()+fadeRate), Math.min(maxVal, ent.getGreenColorF()+fadeRate), maxVal);
+                	 }
+                 }
                 	 int fadingDistStart = 30;
                 	 if (ent.posY > posGround.yCoord + fadingDistStart) {
 		                 float maxVal = ent.getBlueColorF();

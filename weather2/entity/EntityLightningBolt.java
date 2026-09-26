@@ -87,8 +87,10 @@ public class EntityLightningBolt extends EntityWeatherEffect
         if (worldObj.isRemote) {
 	        if (this.lightningState == 2)
 	        {
-	            this.worldObj.playSound(this.posX, this.posY, this.posZ, "ambient.weather.thunder", 64.0F, 0.8F + this.rand.nextFloat() * 0.2F, false);
-	            this.worldObj.playSound(this.posX, this.posY, this.posZ, "random.explode", 2.0F, 0.5F + this.rand.nextFloat() * 0.2F, false);
+	            // NTNH start: balance thunder volume for voice chat compatibility (~70%)
+	            this.worldObj.playSound(this.posX, this.posY, this.posZ, "ambient.weather.thunder", 45.0F, 0.8F + this.rand.nextFloat() * 0.2F, false);
+	            this.worldObj.playSound(this.posX, this.posY, this.posZ, "random.explode", 1.4F, 0.5F + this.rand.nextFloat() * 0.2F, false);
+	            // NTNH end
 	        }
         }
 

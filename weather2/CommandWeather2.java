@@ -22,12 +22,29 @@ public class CommandWeather2 extends CommandBase {
 	@Override
 	public void processCommand(ICommandSender var1, String[] var2) {
 		
-		String helpMsgStorm = "Syntax: storm create <rain/thunder/wind/spout/hail/F0/F1/F2/F3/F4/F5/C0/C1/C2/C3/C4/C5/hurricane> <Optional: alwaysProgress>... example: storm create F1 alwaysProgress ... eg2: storm killall";
+		String helpMsgStorm = "Weather2 Commands: /weather2 spawn <F0-F5/C0-C5/rain/thunder/wind/spout/hail> [alwaysProgress] | /weather2 kill (or killall) | /weather2 config";
 		
 		try {
 			if(var1 instanceof EntityPlayerMP)
 			{
 				EntityPlayer player = getCommandSenderAsPlayer(var1);
+				
+				// NTNH start: friendly aliases for /weather2 kill and /weather2 spawn
+				if (var2.length == 0 || var2[0].equalsIgnoreCase("help")) {
+					var1.sendChatToPlayer(new ChatMessageComponent().addText(helpMsgStorm));
+					return;
+				}
+				
+				if (var2[0].equalsIgnoreCase("kill") || var2[0].equalsIgnoreCase("killall") || var2[0].equalsIgnoreCase("clear")) {
+					var2 = new String[] { "storm", "killall" };
+				} else if ((var2[0].equalsIgnoreCase("spawn") || var2[0].equalsIgnoreCase("create")) && var2.length > 1) {
+					String[] newArgs = new String[var2.length + 1];
+					newArgs[0] = "storm";
+					newArgs[1] = "create";
+					System.arraycopy(var2, 1, newArgs, 2, var2.length - 1);
+					var2 = newArgs;
+				}
+				// NTNH end
 				
 				if (var2[0].equals("volcano")) {
 					if (var2[1].equals("create")) {

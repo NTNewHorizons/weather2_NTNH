@@ -67,4 +67,46 @@ public class WeatherEveHelper {
         if (so.manager.dim == 0) return false;
         return true;
     }
+
+    /**
+     * Enables visible rotating funnels for cyclones as well as tornadoes.
+     */
+    public static boolean shouldSpawnFunnel(StormObject so) {
+        if (so == null) return false;
+        return so.isTornadoFormingOrGreater() || so.isCycloneFormingOrGreater() || so.attrib_waterSpout;
+    }
+
+    /**
+     * Normalizes user commands, adding aliases for /weather2 kill and /weather2 spawn.
+     */
+    public static String[] normalizeCommandArgs(String[] args) {
+        if (args == null || args.length == 0 || args[0].equalsIgnoreCase("help")) {
+            return new String[] { "help" };
+        }
+        if (args[0].equalsIgnoreCase("kill") || args[0].equalsIgnoreCase("killall") || args[0].equalsIgnoreCase("clear")) {
+            return new String[] { "storm", "killall" };
+        }
+        if ((args[0].equalsIgnoreCase("spawn") || args[0].equalsIgnoreCase("create")) && args.length > 1) {
+            String[] newArgs = new String[args.length + 1];
+            newArgs[0] = "storm";
+            newArgs[1] = "create";
+            System.arraycopy(args, 1, newArgs, 2, args.length - 1);
+            return newArgs;
+        }
+        return args;
+    }
+
+    /**
+     * Scales thunder volume for voice chat compatibility (~70%).
+     */
+    public static float getAdjustedThunderVolume(float vol) {
+        return vol * 0.70F;
+    }
+
+    /**
+     * Scales tornado wind sound volume (~75%).
+     */
+    public static float getAdjustedWindVolume(float vol) {
+        return vol * 0.75F;
+    }
 }

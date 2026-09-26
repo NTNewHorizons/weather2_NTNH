@@ -554,6 +554,11 @@ public class TornadoHelper {
             volScaleClose = 0.0F;
         }
 
+        // NTNH start: scale tornado wind sound volume to ~75% for audio balance
+        volScaleFar *= 0.75F;
+        volScaleClose *= 0.75F;
+        // NTNH end
+
         if (distToPlayer < close)
         {
             if (!lastTickPlayerClose)
