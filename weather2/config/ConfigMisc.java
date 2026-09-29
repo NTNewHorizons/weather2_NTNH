@@ -128,6 +128,9 @@ public class ConfigMisc implements IConfigCategory {
 	public static String Dimension_List_Clouds = "0,-127";
 	public static String Dimension_List_Storms = "0,-127";
 	public static String Dimension_List_WindEffects = "0,-127";
+	// NTNH start: safe-by-default dimension whitelist for tornado block destruction
+	public static String Dimension_List_TornadoGrabBlocks = "16, 18, 22, 24";
+	// NTNH end
 
 	public ConfigMisc() {
 		

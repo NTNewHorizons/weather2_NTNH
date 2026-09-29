@@ -2,7 +2,9 @@ package weather2.util;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import weather2.config.ConfigMisc;
 import weather2.weathersystem.storm.StormObject;
 
@@ -78,18 +80,58 @@ public class WeatherEveHelper {
         return defaultOdds;
     }
 
+    // ----------------------------------------------------
+    // Safe-by-Default Dimension Whitelist for Block Grabbing
+    // ----------------------------------------------------
+    private static String lastGrabDimsConfig = null;
+    private static Set<Integer> allowedGrabDims = new HashSet<Integer>();
+
+    /**
+     * Safe-by-default check: tornado block grabbing is only permitted in dimensions
+     * explicitly declared in ConfigMisc.Dimension_List_TornadoGrabBlocks.
+     * All unlisted dimensions (Overworld, Nether, Twilight Forest, vacuum moons, etc.) are strictly immune.
+     */
+    public static boolean isDimensionGrabAllowed(int dim) {
+        String cfg = null;
+        try {
+            Field f = ConfigMisc.class.getField("Dimension_List_TornadoGrabBlocks");
+            cfg = (String) f.get(null);
+        } catch (Throwable t) {
+            cfg = "16, 18, 22, 24";
+        }
+
+        if (cfg == null || cfg.trim().isEmpty()) {
+            return false;
+        }
+
+        if (!cfg.equals(lastGrabDimsConfig)) {
+            Set<Integer> set = new HashSet<Integer>();
+            String[] parts = cfg.replace(",", " ").trim().split("\\s+");
+            for (String p : parts) {
+                if (!p.isEmpty()) {
+                    try {
+                        set.add(Integer.parseInt(p));
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+            allowedGrabDims = set;
+            lastGrabDimsConfig = cfg;
+        }
+
+        return allowedGrabDims.contains(dim);
+    }
+
     /**
      * Determines whether a tornado can rip/grab blocks.
-     * Blocks are destructible ONLY on celestial planets with atmosphere:
-     * Duna (16), Eve (18), Laythe (22), Tekto (24).
-     * Overworld (0), Nether (-1), and all vacuum celestial bodies are strictly immune.
+     * Safe-by-default: only dimensions explicitly declared in Dimension_List_TornadoGrabBlocks are allowed.
+     * Overworld (0), Nether (-1), and all third-party/vacuum dimensions are strictly immune by default.
      * Also enforces a hard dimension cap (MAX_MOVING_BLOCKS_PER_DIM = 200) to protect server TPS.
      */
     public static boolean canTornadoGrabBlocks(StormObject so) {
         if (!ConfigMisc.Storm_Tornado_grabBlocks) return false;
         if (so == null || so.manager == null) return false;
         int dim = so.manager.dim;
-        if (dim != DIM_DUNA && dim != DIM_EVE && dim != DIM_LAYTHE && dim != DIM_TEKTO) {
+        if (!isDimensionGrabAllowed(dim)) {
             return false;
         }
 
