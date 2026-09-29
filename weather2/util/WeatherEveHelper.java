@@ -156,44 +156,123 @@ public class WeatherEveHelper {
         return true;
     }
 
+    // ----------------------------------------------------
+    // Feature-Based Block Protection & Immunity Matrix
+    // ----------------------------------------------------
+    private static Class<?> tileEntityProviderClass = null;
+    private static Object fmlBlockRegistry = null;
+    private static Method getNameForObjectMethod = null;
+    private static boolean registryReflectionFailed = false;
+
+    private static final Set<String> HBM_GRAB_WHITELIST = new HashSet<String>();
+    static {
+        try {
+            tileEntityProviderClass = Class.forName("net.minecraft.block.ITileEntityProvider");
+        } catch (Throwable ignored) {}
+        // Whitelist for HBM blocks that should be destructible by tornadoes (empty by default)
+    }
+
+    public static String getBlockRegistryName(Object blockObj) {
+        if (blockObj == null || registryReflectionFailed) return null;
+        try {
+            if (fmlBlockRegistry == null) {
+                Class<?> gd = Class.forName("cpw.mods.fml.common.registry.GameData");
+                Method getRegistry = gd.getMethod("getBlockRegistry");
+                fmlBlockRegistry = getRegistry.invoke(null);
+                getNameForObjectMethod = fmlBlockRegistry.getClass().getMethod("getNameForObject", Object.class);
+            }
+            return (String) getNameForObjectMethod.invoke(fmlBlockRegistry, blockObj);
+        } catch (Throwable t) {
+            registryReflectionFailed = true;
+            return null;
+        }
+    }
+
+    public static boolean isHbmBlockWhitelisted(Object blockObj) {
+        if (HBM_GRAB_WHITELIST.isEmpty()) return false;
+        String regName = getBlockRegistryName(blockObj);
+        return regName != null && HBM_GRAB_WHITELIST.contains(regName);
+    }
+
     /**
-     * Determines whether a block is immune from being grabbed by a tornado.
-     * Protects:
-     * - Bedrock, tree logs, chests, jukeboxes (upstream defaults)
-     * - Unbreakable blocks (hardness < 0)
-     * - All TileEntities and BlockContainers (machines, mod chests, cables, conduits)
-     * - All Weather2 instruments (sensor, siren, deflector, radar, anemometer, wind vane)
+     * Feature-Based Block Protection Pipeline (Защита по признакам).
+     * Replaces fragile hardness-only checks with authoritative structural invariants:
+     * 1. Weather2 Instruments: All weather2.block.* instruments and machines are IMMUNE.
+     * 2. TileEntity / Container Immunity: Any block extending BlockContainer, implementing
+     *    ITileEntityProvider, or declaring hasTileEntity() is strictly IMMUNE.
+     *    This covers 100% of industrial machines, nuclear reactors, chests, crates, conduits, and cables.
+     * 3. HBM Namespace Protection: Any block under com.hbm.* or registry name hbm:* is strictly IMMUNE,
+     *    completely decoupled from upstream NTM hardness tuning, unless explicitly whitelisted.
+     * 4. Unbreakable Blocks: Any block with negative hardness (hardness < 0.0F, e.g. bedrock) is IMMUNE.
+     * 5. Structural / Tree Defaults: BlockLog, BlockChest, BlockJukebox are IMMUNE.
+     * 6. Hardness formula applies ONLY to remaining generic non-TE debris (planks, glass, wool, foliage).
      */
     public static boolean isBlockProtected(Object blockObj) {
         if (blockObj == null) return true;
 
         Class<?> clazz = blockObj.getClass();
-        while (clazz != null && clazz != Object.class) {
-            String name = clazz.getName();
-            // 1. All Weather2 instruments and machines
-            if (name.startsWith("weather2.block.")) {
+        String className = clazz.getName();
+
+        // 1. Weather2 instruments & machines
+        if (className.startsWith("weather2.block.")) {
+            return true;
+        }
+
+        // 2. HBM Namespace Protection (com.hbm.* or hbm:*)
+        if (className.startsWith("com.hbm.")) {
+            if (!isHbmBlockWhitelisted(blockObj)) {
                 return true;
             }
-            // 2. Containers, logs, chests, jukebox
+        }
+        String regName = getBlockRegistryName(blockObj);
+        if (regName != null && regName.startsWith("hbm:")) {
+            if (!isHbmBlockWhitelisted(blockObj)) {
+                return true;
+            }
+        }
+
+        // 3. TileEntity / Container Immunity
+        // A. ITileEntityProvider interface
+        if (tileEntityProviderClass != null && tileEntityProviderClass.isAssignableFrom(clazz)) {
+            return true;
+        }
+
+        // B. Superclass hierarchy check (BlockContainer, BlockLog, BlockChest, BlockJukebox)
+        Class<?> curr = clazz;
+        while (curr != null && curr != Object.class) {
+            String name = curr.getName();
             if (name.equals("net.minecraft.block.BlockContainer") ||
                 name.equals("net.minecraft.block.BlockLog") ||
                 name.equals("net.minecraft.block.BlockChest") ||
                 name.equals("net.minecraft.block.BlockJukebox")) {
                 return true;
             }
-            clazz = clazz.getSuperclass();
+            if (name.startsWith("com.hbm.")) {
+                if (!isHbmBlockWhitelisted(blockObj)) {
+                    return true;
+                }
+            }
+            curr = curr.getSuperclass();
         }
 
-        // 3. TileEntity check (covers all modded machines, cables, pipes, and crates)
+        // C. hasTileEntity(int metadata) Forge method
         try {
-            Method m = blockObj.getClass().getMethod("hasTileEntity", int.class);
+            Method m = clazz.getMethod("hasTileEntity", int.class);
             if (((Boolean) m.invoke(blockObj, 0)).booleanValue()) {
                 return true;
             }
         } catch (Throwable ignored) {}
 
-        // 4. Unbreakable blocks (hardness < 0)
-        for (Class<?> c = blockObj.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+        // D. hasTileEntity() parameterless method
+        try {
+            Method m = clazz.getMethod("hasTileEntity");
+            if (((Boolean) m.invoke(blockObj)).booleanValue()) {
+                return true;
+            }
+        } catch (Throwable ignored) {}
+
+        // 4. Unbreakable blocks (hardness < 0, e.g. bedrock -1.0F)
+        for (Class<?> c = clazz; c != null && c != Object.class; c = c.getSuperclass()) {
             try {
                 Field f = c.getDeclaredField("blockHardness");
                 f.setAccessible(true);
