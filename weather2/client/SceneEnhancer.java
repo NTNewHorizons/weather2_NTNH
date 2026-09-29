@@ -24,8 +24,8 @@ import weather2.Weather;
 import weather2.api.WindReader;
 import weather2.client.entity.particle.EntityFallingRainFX;
 import weather2.client.entity.particle.EntityFallingSnowFX;
-import weather2.client.entity.particle.EntityWaterfallFX;
 import weather2.config.ConfigMisc;
+import weather2.util.WeatherEveHelper;
 import weather2.util.WeatherUtil;
 import weather2.util.WeatherUtilConfig;
 import weather2.util.WeatherUtilEntity;
@@ -297,15 +297,25 @@ public class SceneEnhancer implements Runnable {
 		
 		WeatherUtilParticle.getFXLayers();
 		WeatherUtilSound.getSoundSystem();
+		// NTNH start: reset precipitation state on world transition
+		curPrecipStr = 0F;
+		curPrecipStrTarget = 0F;
+		curOvercastStr = 0F;
+		curOvercastStrTarget = 0F;
+		WeatherEveHelper.onPrecipitationTick(0F);
+		// NTNH end
 	}
 	
 	public void tickParticlePrecipitation() {
-		
+		// NTNH start: Dynamic Surroundings synergy - always evaluate storm proximity and rain strength
+		EntityPlayer entP = FMLClientHandler.instance().getClient().thePlayer;
+		if (entP == null || entP.worldObj == null) {
+			return;
+		}
+
+		float curPrecipVal = getRainStrengthAndControlVisuals(entP);
+
 		if (ConfigMisc.Particle_RainSnow) {
-			EntityPlayer entP = FMLClientHandler.instance().getClient().thePlayer;
-			
-			float curPrecipVal = getRainStrengthAndControlVisuals(entP);
-			
 			float maxPrecip = 0.5F;
 			
 			/*if (entP.worldObj.getTotalWorldTime() % 20 == 0) {
@@ -523,17 +533,19 @@ public class SceneEnhancer implements Runnable {
 	    		}
 	    	}*/
 	    	
-	    	//mc.theWorld.setRainStrength(curPrecipStr);
-	    	
 	    	if (curPrecipStr > curPrecipStrTarget) {
-		    	curPrecipStr -= 0.001F;
+		    	curPrecipStr -= 0.005F;
 		    } else if (curPrecipStr < curPrecipStrTarget) {
-		    	curPrecipStr += 0.001F;
+		    	curPrecipStr += 0.005F;
 		    }
 	    	
 	    	if (curPrecipStr < 0.0001 && curPrecipStr > -0.0001F) {
 	    		curPrecipStr = 0;
 	    	}
+
+	    	// NTNH start: Dynamic Surroundings synergy & client rain strength synchronization
+	    	WeatherEveHelper.onPrecipitationTick(curPrecipStr);
+	    	// NTNH end
 	    	
 	    	//Weather.dbg("curPrecipStr: " + curPrecipStr);
 	    	

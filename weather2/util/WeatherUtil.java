@@ -100,6 +100,11 @@ public class WeatherUtil {
     
     public static boolean safetyCheck(int id)
     {
+        // NTNH start: delegate to WeatherEveHelper for comprehensive safety
+        if (id > 0 && id < Block.blocksList.length && Block.blocksList[id] != null) {
+            if (WeatherEveHelper.isBlockProtected(Block.blocksList[id])) return false;
+        }
+        // NTNH end
         if (id != Block.bedrock.blockID && id != Block.wood.blockID && id != Block.chest.blockID && id != Block.jukebox.blockID/* && id != Block.waterMoving.blockID && id != Block.waterStill.blockID */)
         {
             return true;

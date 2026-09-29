@@ -1,8 +1,10 @@
 package weather2.util;
 
-import weather2.weathersystem.storm.StormObject;
-import weather2.weathersystem.WeatherManagerBase;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.List;
 import weather2.config.ConfigMisc;
+import weather2.weathersystem.storm.StormObject;
 
 /**
  * NTNH helper for Eve (dim 18) and Tekto (dim 24) climate profiles,
@@ -15,6 +17,8 @@ public class WeatherEveHelper {
     public static final int DIM_EVE = 18;
     public static final int DIM_LAYTHE = 22;
     public static final int DIM_TEKTO = 24;
+
+    public static final int MAX_MOVING_BLOCKS_PER_DIM = 200;
 
     public static boolean isEve(StormObject so) {
         return so != null && so.manager != null && so.manager.dim == DIM_EVE;
@@ -79,12 +83,88 @@ public class WeatherEveHelper {
      * Blocks are destructible ONLY on celestial planets with atmosphere:
      * Duna (16), Eve (18), Laythe (22), Tekto (24).
      * Overworld (0), Nether (-1), and all vacuum celestial bodies are strictly immune.
+     * Also enforces a hard dimension cap (MAX_MOVING_BLOCKS_PER_DIM = 200) to protect server TPS.
      */
     public static boolean canTornadoGrabBlocks(StormObject so) {
         if (!ConfigMisc.Storm_Tornado_grabBlocks) return false;
         if (so == null || so.manager == null) return false;
         int dim = so.manager.dim;
-        return dim == DIM_DUNA || dim == DIM_EVE || dim == DIM_LAYTHE || dim == DIM_TEKTO;
+        if (dim != DIM_DUNA && dim != DIM_EVE && dim != DIM_LAYTHE && dim != DIM_TEKTO) {
+            return false;
+        }
+
+        // Global hard cap on EntityMovingBlock per dimension to protect server TPS
+        if (so.manager.getStormObjects() != null) {
+            int totalBlocksInDim = 0;
+            List storms = so.manager.getStormObjects();
+            for (int i = 0; i < storms.size(); i++) {
+                Object obj = storms.get(i);
+                if (obj instanceof StormObject) {
+                    StormObject other = (StormObject) obj;
+                    if (other.tornadoHelper != null) {
+                        totalBlocksInDim += other.tornadoHelper.blockCount;
+                    }
+                }
+            }
+            if (totalBlocksInDim >= MAX_MOVING_BLOCKS_PER_DIM) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Determines whether a block is immune from being grabbed by a tornado.
+     * Protects:
+     * - Bedrock, tree logs, chests, jukeboxes (upstream defaults)
+     * - Unbreakable blocks (hardness < 0)
+     * - All TileEntities and BlockContainers (machines, mod chests, cables, conduits)
+     * - All Weather2 instruments (sensor, siren, deflector, radar, anemometer, wind vane)
+     */
+    public static boolean isBlockProtected(Object blockObj) {
+        if (blockObj == null) return true;
+
+        Class<?> clazz = blockObj.getClass();
+        while (clazz != null && clazz != Object.class) {
+            String name = clazz.getName();
+            // 1. All Weather2 instruments and machines
+            if (name.startsWith("weather2.block.")) {
+                return true;
+            }
+            // 2. Containers, logs, chests, jukebox
+            if (name.equals("net.minecraft.block.BlockContainer") ||
+                name.equals("net.minecraft.block.BlockLog") ||
+                name.equals("net.minecraft.block.BlockChest") ||
+                name.equals("net.minecraft.block.BlockJukebox")) {
+                return true;
+            }
+            clazz = clazz.getSuperclass();
+        }
+
+        // 3. TileEntity check (covers all modded machines, cables, pipes, and crates)
+        try {
+            Method m = blockObj.getClass().getMethod("hasTileEntity", int.class);
+            if (((Boolean) m.invoke(blockObj, 0)).booleanValue()) {
+                return true;
+            }
+        } catch (Throwable ignored) {}
+
+        // 4. Unbreakable blocks (hardness < 0)
+        for (Class<?> c = blockObj.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                Field f = c.getDeclaredField("blockHardness");
+                f.setAccessible(true);
+                if (f.getFloat(blockObj) < 0.0F) return true;
+            } catch (Throwable ignored) {}
+            try {
+                Field f = c.getDeclaredField("field_149782_v");
+                f.setAccessible(true);
+                if (f.getFloat(blockObj) < 0.0F) return true;
+            } catch (Throwable ignored) {}
+        }
+
+        return false;
     }
 
     /**
@@ -127,5 +207,115 @@ public class WeatherEveHelper {
      */
     public static float getAdjustedWindVolume(float vol) {
         return vol * 0.75F;
+    }
+
+    // ----------------------------------------------------
+    // Dynamic Surroundings Synergy & Rain Synchronization
+    // ----------------------------------------------------
+    private static boolean worldRainInit = false;
+    private static Method worldSetRainStrength = null;
+    private static Field worldRainingStrength = null;
+    private static Field worldPrevRainingStrength = null;
+
+    private static boolean dsurroundInit = false;
+    private static Method dsurroundSetIntensity = null;
+
+    public static void setWorldRainStrength(Object worldObj, float strength) {
+        if (worldObj == null) return;
+        if (!worldRainInit) {
+            worldRainInit = true;
+            Class<?> wc = worldObj.getClass();
+            try {
+                worldSetRainStrength = wc.getMethod("setRainStrength", float.class);
+            } catch (Throwable t1) {
+                try {
+                    worldSetRainStrength = wc.getMethod("func_72885_k", float.class);
+                } catch (Throwable t2) {
+                    worldSetRainStrength = null;
+                }
+            }
+            if (worldSetRainStrength == null) {
+                for (Class<?> c = wc; c != null && c != Object.class; c = c.getSuperclass()) {
+                    try {
+                        Field f = c.getDeclaredField("rainingStrength");
+                        f.setAccessible(true);
+                        worldRainingStrength = f;
+                    } catch (Throwable ignored) {}
+                    try {
+                        Field f = c.getDeclaredField("field_73004_o");
+                        f.setAccessible(true);
+                        worldRainingStrength = f;
+                    } catch (Throwable ignored) {}
+
+                    try {
+                        Field f = c.getDeclaredField("prevRainingStrength");
+                        f.setAccessible(true);
+                        worldPrevRainingStrength = f;
+                    } catch (Throwable ignored) {}
+                    try {
+                        Field f = c.getDeclaredField("field_73003_n");
+                        f.setAccessible(true);
+                        worldPrevRainingStrength = f;
+                    } catch (Throwable ignored) {}
+
+                    if (worldRainingStrength != null && worldPrevRainingStrength != null) break;
+                }
+            }
+        }
+
+        if (worldSetRainStrength != null) {
+            try {
+                worldSetRainStrength.invoke(worldObj, strength);
+                return;
+            } catch (Throwable ignored) {}
+        }
+
+        if (worldRainingStrength != null && worldPrevRainingStrength != null) {
+            try {
+                worldRainingStrength.setFloat(worldObj, strength);
+                worldPrevRainingStrength.setFloat(worldObj, strength);
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    public static void updateDSurroundIntensity(float intensity) {
+        if (!dsurroundInit) {
+            dsurroundInit = true;
+            try {
+                Class<?> clazz = Class.forName("org.blockartistry.mod.DynSurround.client.weather.Weather");
+                dsurroundSetIntensity = clazz.getMethod("setIntensity", float.class);
+            } catch (Throwable t) {
+                dsurroundSetIntensity = null;
+            }
+        }
+        if (dsurroundSetIntensity != null) {
+            try {
+                dsurroundSetIntensity.invoke(null, intensity);
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    public static void onPrecipitationTick(float curPrecipStr) {
+        try {
+            Object handler = Class.forName("cpw.mods.fml.client.FMLClientHandler").getMethod("instance").invoke(null);
+            if (handler != null) {
+                Object mc = handler.getClass().getMethod("getClient").invoke(handler);
+                if (mc != null) {
+                    Object world = null;
+                    try {
+                        world = mc.getClass().getField("theWorld").get(mc);
+                    } catch (Throwable t) {
+                        try {
+                            world = mc.getClass().getField("field_71441_e").get(mc);
+                        } catch (Throwable ignored) {}
+                    }
+                    if (world != null) {
+                        float strength = Math.abs(curPrecipStr);
+                        setWorldRainStrength(world, strength);
+                        updateDSurroundIntensity(strength);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 }
