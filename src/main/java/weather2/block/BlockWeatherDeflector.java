@@ -30,4 +30,20 @@ public class BlockWeatherDeflector extends BlockContainer {
     public boolean renderAsNormalBlock() {
         return false;
     }
+
+    // NTNH start: Redstone & Comparator FSM Integration
+    @Override
+    public boolean hasComparatorInputOverride() {
+        return true;
+    }
+
+    @Override
+    public int getComparatorInputOverride(World world, int x, int y, int z, int side) {
+        TileEntity te = world.getTileEntity(x, y, z);
+        if (te instanceof TileEntityWeatherDeflector) {
+            return ((TileEntityWeatherDeflector) te).getComparatorOutput();
+        }
+        return 0;
+    }
+    // NTNH end
 }

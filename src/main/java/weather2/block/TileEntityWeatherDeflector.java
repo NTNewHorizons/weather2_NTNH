@@ -13,14 +13,16 @@ import net.minecraftforge.common.util.ForgeDirection;
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.Optional;
 import weather2.ServerTickHandler;
+import weather2.compat.WeatherNTNHHooks;
+import weather2.deflector.DeflectorState;
 import weather2.weathersystem.WeatherManagerServer;
 import weather2.weathersystem.storm.StormObject;
 
-// NTNH start: High Energy (HE) consumption & active field mechanics
+// NTNH start: High Energy (HE) consumption & explicit State Machine
 @Optional.InterfaceList({ @Optional.Interface(iface = "api.hbm.energymk2.IEnergyReceiverMK2", modid = "hbm"),
     @Optional.Interface(iface = "cofh.api.energy.IEnergyReceiver", modid = "CoFHCore") })
 public class TileEntityWeatherDeflector extends TileEntity
-    implements api.hbm.energymk2.IEnergyReceiverMK2, cofh.api.energy.IEnergyReceiver {
+    implements weather2.deflector.IDeflectorTE, api.hbm.energymk2.IEnergyReceiverMK2, cofh.api.energy.IEnergyReceiver {
 
     public int deflectorRadius = 150;
 
@@ -28,9 +30,68 @@ public class TileEntityWeatherDeflector extends TileEntity
     public static final long maxPower = 100000000L;
     public static final long IDLE_DRAIN = 25000L;
 
+    // Explicit State Machine
+    public DeflectorState state = DeflectorState.OFFLINE;
+    public int stateTimer = 0;
+
+    // Backward-compatibility mirror fields
     public boolean isFieldActive = false;
     private boolean prevFieldActive = false;
+    private DeflectorState prevState = DeflectorState.OFFLINE;
     public int blackoutCooldown = 0;
+
+    @Override
+    public Object getDeflectorWorld() {
+        return this.worldObj;
+    }
+
+    @Override
+    public int getDeflectorX() {
+        return this.xCoord;
+    }
+
+    @Override
+    public int getDeflectorY() {
+        return this.yCoord;
+    }
+
+    @Override
+    public int getDeflectorZ() {
+        return this.zCoord;
+    }
+
+    public DeflectorState getState() {
+        return this.state != null ? this.state : DeflectorState.OFFLINE;
+    }
+
+    public int getStateTimer() {
+        return this.stateTimer;
+    }
+
+    public void setStateTimer(int timer) {
+        this.stateTimer = timer;
+        this.blackoutCooldown = timer;
+    }
+
+    public int getComparatorOutput() {
+        return this.state != null ? this.state.getComparatorSignal() : 0;
+    }
+
+    public void transitionTo(DeflectorState newState, int timer) {
+        if (newState == null) newState = DeflectorState.OFFLINE;
+        this.state = newState;
+        this.stateTimer = timer;
+        this.isFieldActive = newState.isFieldActive();
+        this.blackoutCooldown = (newState == DeflectorState.BLACKOUT_DEPLETED
+            || newState == DeflectorState.OVERLOAD_COLLAPSED) ? timer : 0;
+
+        if (worldObj != null && !worldObj.isRemote) {
+            this.markDirty();
+            worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
+            worldObj.notifyBlocksOfNeighborChange(xCoord, yCoord, zCoord, this.getBlockType());
+            worldObj.func_147453_f(xCoord, yCoord, zCoord, this.getBlockType());
+        }
+    }
 
     @Override
     public void updateEntity() {
@@ -42,10 +103,10 @@ public class TileEntityWeatherDeflector extends TileEntity
                 updateHbmConnections();
             }
 
-            // Power drain & blackout management
-            weather2.util.WeatherEveHelper.tickDeflectorPower(this);
+            // Power drain & FSM tick
+            WeatherNTNHHooks.tickDeflectorPower(this);
 
-            // Active deflector scan: 1-second interval (20 ticks, staggered) when powered
+            // Active deflector scan: 1-second interval (20 ticks, staggered) when field is active
             if (this.isFieldActive && (time + (xCoord ^ zCoord)) % 20 == 0) {
                 WeatherManagerServer wm = (WeatherManagerServer) ServerTickHandler.lookupDimToWeatherMan
                     .get(worldObj.provider.dimensionId);
@@ -57,7 +118,7 @@ public class TileEntityWeatherDeflector extends TileEntity
                     for (int i = 0; i < storms.size(); i++) {
                         StormObject storm = (StormObject) storms.get(i);
                         if (storm != null && !storm.isDead) {
-                            boolean collapsed = weather2.util.WeatherEveHelper.processDeflectorStorm(this, wm, storm);
+                            boolean collapsed = WeatherNTNHHooks.processDeflectorStorm(this, wm, storm);
                             if (collapsed) {
                                 break;
                             }
@@ -66,14 +127,80 @@ public class TileEntityWeatherDeflector extends TileEntity
                 }
             }
 
-            // Staggered network sync: state transition marks dirty, periodic 40-tick sync updates client packet
-            if (this.isFieldActive != this.prevFieldActive) {
+            // Staggered network sync: state transition triggers update packet, periodic 40-tick sync updates energy
+            if (this.state != this.prevState || this.isFieldActive != this.prevFieldActive) {
+                this.prevState = this.state;
                 this.prevFieldActive = this.isFieldActive;
                 worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
                 markDirty();
             } else if ((time + (xCoord ^ zCoord)) % 40 == 0) {
                 worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
             }
+        } else {
+            // Client-side ambient & diagnostic effects according to FSM state
+            spawnClientStateEffects();
+        }
+    }
+
+    private void spawnClientStateEffects() {
+        if (this.state == null) return;
+        switch (this.state) {
+            case ACTIVE:
+                if (worldObj.rand.nextInt(4) == 0) {
+                    worldObj.spawnParticle(
+                        "reddust",
+                        xCoord + 0.5D + (worldObj.rand.nextDouble() - 0.5D) * 0.4D,
+                        yCoord + 1.1D,
+                        zCoord + 0.5D + (worldObj.rand.nextDouble() - 0.5D) * 0.4D,
+                        0.0D,
+                        0.6D,
+                        1.0D);
+                }
+                break;
+            case DISSIPATING:
+                for (int i = 0; i < 3; i++) {
+                    worldObj.spawnParticle(
+                        "fireworksSpark",
+                        xCoord + 0.5D,
+                        yCoord + 1.2D,
+                        zCoord + 0.5D,
+                        (worldObj.rand.nextDouble() - 0.5D) * 0.2D,
+                        0.3D,
+                        (worldObj.rand.nextDouble() - 0.5D) * 0.2D);
+                }
+                break;
+            case BLACKOUT_DEPLETED:
+                if (worldObj.rand.nextInt(3) == 0) {
+                    worldObj.spawnParticle("smoke", xCoord + 0.5D, yCoord + 0.8D, zCoord + 0.5D, 0.0D, 0.04D, 0.0D);
+                    worldObj.spawnParticle(
+                        "crit",
+                        xCoord + 0.5D,
+                        yCoord + 0.8D,
+                        zCoord + 0.5D,
+                        (worldObj.rand.nextDouble() - 0.5D) * 0.1D,
+                        0.1D,
+                        (worldObj.rand.nextDouble() - 0.5D) * 0.1D);
+                }
+                break;
+            case OVERLOAD_COLLAPSED:
+                if (worldObj.rand.nextInt(2) == 0) {
+                    worldObj
+                        .spawnParticle("largesmoke", xCoord + 0.5D, yCoord + 0.9D, zCoord + 0.5D, 0.0D, 0.06D, 0.0D);
+                }
+                if (worldObj.rand.nextInt(5) == 0) {
+                    worldObj.spawnParticle(
+                        "flame",
+                        xCoord + 0.5D,
+                        yCoord + 0.8D,
+                        zCoord + 0.5D,
+                        (worldObj.rand.nextDouble() - 0.5D) * 0.05D,
+                        0.03D,
+                        (worldObj.rand.nextDouble() - 0.5D) * 0.05D);
+                }
+                break;
+            case OFFLINE:
+            default:
+                break;
         }
     }
 
@@ -111,7 +238,10 @@ public class TileEntityWeatherDeflector extends TileEntity
     public void writeToNBT(NBTTagCompound nbt) {
         super.writeToNBT(nbt);
         nbt.setLong("power", this.power);
-        nbt.setBoolean("isFieldActive", this.isFieldActive);
+        nbt.setByte("deflectorState", (byte) (this.state != null ? this.state.getId() : 0));
+        nbt.setInteger("stateTimer", this.stateTimer);
+        // Legacy keys for backward compatibility
+        nbt.setBoolean("isFieldActive", this.state != null ? this.state.isFieldActive() : false);
         nbt.setInteger("blackoutCooldown", this.blackoutCooldown);
     }
 
@@ -119,9 +249,28 @@ public class TileEntityWeatherDeflector extends TileEntity
     public void readFromNBT(NBTTagCompound nbt) {
         super.readFromNBT(nbt);
         this.power = nbt.getLong("power");
-        this.isFieldActive = nbt.getBoolean("isFieldActive");
+        if (nbt.hasKey("deflectorState")) {
+            this.state = DeflectorState.fromId(nbt.getByte("deflectorState"));
+            this.stateTimer = nbt.getInteger("stateTimer");
+        } else {
+            this.blackoutCooldown = nbt.getInteger("blackoutCooldown");
+            boolean fieldActive = nbt.getBoolean("isFieldActive");
+            if (this.blackoutCooldown > 0) {
+                this.state = DeflectorState.BLACKOUT_DEPLETED;
+                this.stateTimer = this.blackoutCooldown;
+            } else if (fieldActive) {
+                this.state = DeflectorState.ACTIVE;
+                this.stateTimer = 0;
+            } else {
+                this.state = DeflectorState.OFFLINE;
+                this.stateTimer = 0;
+            }
+        }
+        this.isFieldActive = this.state.isFieldActive();
         this.prevFieldActive = this.isFieldActive;
-        this.blackoutCooldown = nbt.getInteger("blackoutCooldown");
+        this.prevState = this.state;
+        this.blackoutCooldown = (this.state == DeflectorState.BLACKOUT_DEPLETED
+            || this.state == DeflectorState.OVERLOAD_COLLAPSED) ? this.stateTimer : 0;
     }
 
     @Override

@@ -3,21 +3,27 @@ package weather2.deflector;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
+import weather2.weathersystem.WeatherManagerServer;
 import weather2.weathersystem.storm.StormObject;
 
 /**
- * NTNH Deep Module: Weather Deflector Power Engine & Storm Dissipation.
- * Manages active HBM HE MK2 power consumption:
- * - 25,000 HE/t idle maintenance drain ($500,000 HE/s)
- * - Dynamic storm dissipation cost table (100k HE .. 50M HE)
- * - Power blackout cooldown (200 ticks / 10s) upon insufficient HE in buffer
- * - Catastrophic overload collapse (300 ticks / 15s) upon F5/C5 impact (unsuppressable)
- * - 3D acoustic effects for electrical arc discharge, short circuits, and dissipation
+ * NTNH Deep Module: Weather Deflector Power Engine & State Machine Controller.
+ * Manages active HBM HE MK2 power consumption and explicit state transitions:
+ * - OFFLINE (0 HE): Unpowered or depleted buffer (< 25 kHE). Field collapsed.
+ * - ACTIVE (25 kHE/t): Nominal operation, 150 blocks radius protection dome.
+ * - DISSIPATING (100k..50M HE): High-energy EMP pulse neutralizing storm F0-F4.
+ * - BLACKOUT_DEPLETED (200 ticks / 10s): Power failure lockout when depleted under load.
+ * - OVERLOAD_COLLAPSED (300 ticks / 15s): Catastrophic collapse upon F5/C5 impact (unsuppressable).
+ * - Redstone comparator integration: emits distinct analog signals (15, 12, 6, 1, 0) per state.
  */
 public class DeflectorPowerEngine {
 
     public static final long DEFLECTOR_IDLE_DRAIN = 25000L;
     public static final long DEFLECTOR_MAX_POWER = 100000000L;
+
+    public static final int COOLDOWN_BLACKOUT = 200;
+    public static final int COOLDOWN_OVERLOAD = 300;
+    public static final int COOLDOWN_DISSIPATING = 5;
 
     private static Field deflectorPowerField = null;
     private static Field deflectorFieldActiveField = null;
@@ -59,11 +65,74 @@ public class DeflectorPowerEngine {
     }
 
     /**
-     * Ticks deflector power and manages blackout cooldown.
+     * Ticks deflector power and executes State Machine transitions.
      * Called every tick on logical server.
      */
     public static boolean tickDeflectorPower(Object deflectorObj) {
         if (deflectorObj == null) return false;
+
+        if (deflectorObj instanceof IDeflectorTE) {
+            IDeflectorTE te = (IDeflectorTE) deflectorObj;
+            DeflectorState state = te.getState();
+            int timer = te.getStateTimer();
+            long power = te.getPower();
+
+            switch (state) {
+                case OFFLINE:
+                    if (power >= DEFLECTOR_IDLE_DRAIN) {
+                        te.transitionTo(DeflectorState.ACTIVE, 0);
+                        return true;
+                    }
+                    return false;
+
+                case ACTIVE:
+                    if (power < DEFLECTOR_IDLE_DRAIN) {
+                        te.transitionTo(DeflectorState.OFFLINE, 0);
+                        return false;
+                    }
+                    te.setPower(power - DEFLECTOR_IDLE_DRAIN);
+                    return true;
+
+                case DISSIPATING:
+                    if (timer > 0) {
+                        te.setStateTimer(timer - 1);
+                    }
+                    if (te.getStateTimer() <= 0) {
+                        if (power >= DEFLECTOR_IDLE_DRAIN) {
+                            te.transitionTo(DeflectorState.ACTIVE, 0);
+                            return true;
+                        } else {
+                            te.transitionTo(DeflectorState.OFFLINE, 0);
+                            return false;
+                        }
+                    }
+                    if (power >= DEFLECTOR_IDLE_DRAIN) {
+                        te.setPower(power - DEFLECTOR_IDLE_DRAIN);
+                    }
+                    return true;
+
+                case BLACKOUT_DEPLETED:
+                case OVERLOAD_COLLAPSED:
+                    if (timer > 0) {
+                        te.setStateTimer(timer - 1);
+                    }
+                    if (te.getStateTimer() <= 0) {
+                        if (power >= DEFLECTOR_IDLE_DRAIN) {
+                            te.transitionTo(DeflectorState.ACTIVE, 0);
+                            return true;
+                        } else {
+                            te.transitionTo(DeflectorState.OFFLINE, 0);
+                            return false;
+                        }
+                    }
+                    return false;
+
+                default:
+                    return false;
+            }
+        }
+
+        // Reflective fallback for test mocks
         initDeflectorReflection(deflectorObj.getClass());
 
         int blackout = 0;
@@ -136,10 +205,78 @@ public class DeflectorPowerEngine {
      */
     public static boolean processDeflectorStorm(Object deflectorObj, Object wmObj, Object stormObj) {
         if (deflectorObj == null || wmObj == null || stormObj == null) return false;
-        initDeflectorReflection(deflectorObj.getClass());
-
         StormObject storm = (StormObject) stormObj;
         if (storm.isDead) return false;
+
+        long cost = getDeflectorDissipationCost(storm.levelCurIntensityStage);
+
+        if (deflectorObj instanceof IDeflectorTE) {
+            IDeflectorTE te = (IDeflectorTE) deflectorObj;
+            long currentPower = te.getPower();
+
+            if (cost < 0) {
+                // Case 1: F5 / C5 Catastrophic Storm — OVERLOAD COLLAPSE!
+                te.transitionTo(DeflectorState.OVERLOAD_COLLAPSED, COOLDOWN_OVERLOAD);
+                playSound(
+                    te.getDeflectorWorld(),
+                    te.getDeflectorX() + 0.5D,
+                    te.getDeflectorY() + 0.5D,
+                    te.getDeflectorZ() + 0.5D,
+                    "random.explode",
+                    0.8F,
+                    1.6F);
+                playSound(
+                    te.getDeflectorWorld(),
+                    te.getDeflectorX() + 0.5D,
+                    te.getDeflectorY() + 0.5D,
+                    te.getDeflectorZ() + 0.5D,
+                    "random.fizz",
+                    1.2F,
+                    0.5F);
+                return true;
+            } else if (currentPower >= cost) {
+                // Case 2: Sufficient HE power to dissipate storm (F0..F4)
+                te.setPower(currentPower - cost);
+
+                if (wmObj instanceof WeatherManagerServer) {
+                    WeatherManagerServer wm = (WeatherManagerServer) wmObj;
+                    wm.removeStormObject(storm.ID);
+                    wm.syncStormRemove(storm);
+                } else {
+                    initWeatherManagerMethods(wmObj.getClass());
+                    try {
+                        if (wmRemoveStormMethod != null) wmRemoveStormMethod.invoke(wmObj, storm.ID);
+                        if (wmSyncStormMethod != null) wmSyncStormMethod.invoke(wmObj, storm);
+                    } catch (Throwable ignored) {}
+                }
+
+                te.transitionTo(DeflectorState.DISSIPATING, COOLDOWN_DISSIPATING);
+                playSound(
+                    te.getDeflectorWorld(),
+                    te.getDeflectorX() + 0.5D,
+                    te.getDeflectorY() + 0.5D,
+                    te.getDeflectorZ() + 0.5D,
+                    "random.fizz",
+                    1.0F,
+                    1.2F);
+                return false;
+            } else {
+                // Case 3: Insufficient HE power in buffer — POWER FAILURE BLACKOUT!
+                te.transitionTo(DeflectorState.BLACKOUT_DEPLETED, COOLDOWN_BLACKOUT);
+                playSound(
+                    te.getDeflectorWorld(),
+                    te.getDeflectorX() + 0.5D,
+                    te.getDeflectorY() + 0.5D,
+                    te.getDeflectorZ() + 0.5D,
+                    "random.fizz",
+                    1.0F,
+                    0.6F);
+                return true;
+            }
+        }
+
+        // Reflective fallback for test mocks
+        initDeflectorReflection(deflectorObj.getClass());
 
         long currentPower = 0;
         try {
@@ -147,8 +284,6 @@ public class DeflectorPowerEngine {
                 currentPower = deflectorPowerField.getLong(deflectorObj);
             }
         } catch (Throwable ignored) {}
-
-        long cost = getDeflectorDissipationCost(storm.levelCurIntensityStage);
 
         Object worldObj = null;
         int x = 0, y = 0, z = 0;
@@ -165,13 +300,11 @@ public class DeflectorPowerEngine {
         } catch (Throwable ignored) {}
 
         if (cost < 0) {
-            // Case 1: F5 / C5 Catastrophic Storm — OVERLOAD COLLAPSE!
-            triggerDeflectorOverload(deflectorObj, 300); // 15 seconds blackout
+            triggerDeflectorOverload(deflectorObj, COOLDOWN_OVERLOAD);
             playSound(worldObj, x + 0.5, y + 0.5, z + 0.5, "random.explode", 0.8F, 1.6F);
             playSound(worldObj, x + 0.5, y + 0.5, z + 0.5, "random.fizz", 1.2F, 0.5F);
             return true;
         } else if (currentPower >= cost) {
-            // Case 2: Sufficient HE power to dissipate storm (F0..F4)
             currentPower -= cost;
             try {
                 if (deflectorPowerField != null) {
@@ -192,8 +325,7 @@ public class DeflectorPowerEngine {
             playSound(worldObj, x + 0.5, y + 0.5, z + 0.5, "random.fizz", 1.0F, 1.2F);
             return false;
         } else {
-            // Case 3: Insufficient HE power in buffer — POWER FAILURE BLACKOUT!
-            triggerDeflectorOverload(deflectorObj, 200); // 10 seconds blackout
+            triggerDeflectorOverload(deflectorObj, COOLDOWN_BLACKOUT);
             playSound(worldObj, x + 0.5, y + 0.5, z + 0.5, "random.fizz", 1.0F, 0.6F);
             return true;
         }
