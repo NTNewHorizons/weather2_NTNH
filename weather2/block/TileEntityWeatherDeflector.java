@@ -27,12 +27,12 @@ public class TileEntityWeatherDeflector extends TileEntity implements api.hbm.en
     public int deflectorRadius = 150;
 
     public long power = 0;
-    public static final long maxPower = 2000000L;
-    public static final long IDLE_DRAIN = 50000L;
-    public static final long PULSE_DRAIN = 250000L;
+    public static final long maxPower = 100000000L;
+    public static final long IDLE_DRAIN = 25000L;
 
     public boolean isFieldActive = false;
     private boolean prevFieldActive = false;
+    public int blackoutCooldown = 0;
 
     @Override
     public void updateEntity()
@@ -45,13 +45,8 @@ public class TileEntityWeatherDeflector extends TileEntity implements api.hbm.en
                 updateHbmConnections();
             }
 
-            // Power drain: idle field maintenance
-            if (this.power >= IDLE_DRAIN) {
-                this.power -= IDLE_DRAIN;
-                this.isFieldActive = true;
-            } else {
-                this.isFieldActive = false;
-            }
+            // Power drain & blackout management
+            weather2.util.WeatherEveHelper.tickDeflectorPower(this);
 
             // Active deflector scan: 1-second interval (20 ticks, staggered) when powered
             if (this.isFieldActive && (time + (xCoord ^ zCoord)) % 20 == 0) {
@@ -63,13 +58,8 @@ public class TileEntityWeatherDeflector extends TileEntity implements api.hbm.en
                     for (int i = 0; i < storms.size(); i++) {
                         StormObject storm = storms.get(i);
                         if (storm != null && !storm.isDead) {
-                            if (this.power >= PULSE_DRAIN) {
-                                this.power -= PULSE_DRAIN;
-                                wm.removeStormObject(storm.ID);
-                                wm.syncStormRemove(storm);
-                            } else {
-                                // Blackout under severe overload
-                                this.isFieldActive = false;
+                            boolean collapsed = weather2.util.WeatherEveHelper.processDeflectorStorm(this, wm, storm);
+                            if (collapsed) {
                                 break;
                             }
                         }
@@ -124,6 +114,7 @@ public class TileEntityWeatherDeflector extends TileEntity implements api.hbm.en
         super.writeToNBT(nbt);
         nbt.setLong("power", this.power);
         nbt.setBoolean("isFieldActive", this.isFieldActive);
+        nbt.setInteger("blackoutCooldown", this.blackoutCooldown);
     }
 
     @Override
@@ -133,6 +124,7 @@ public class TileEntityWeatherDeflector extends TileEntity implements api.hbm.en
         this.power = nbt.getLong("power");
         this.isFieldActive = nbt.getBoolean("isFieldActive");
         this.prevFieldActive = this.isFieldActive;
+        this.blackoutCooldown = nbt.getInteger("blackoutCooldown");
     }
 
     @Override

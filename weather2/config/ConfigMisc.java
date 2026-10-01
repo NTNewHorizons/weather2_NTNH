@@ -38,6 +38,7 @@ public class ConfigMisc implements IConfigCategory {
 	public static boolean Storm_Tornado_GrabListBlacklistMode = false;
 	public static String Storm_Tornado_GrabList = "";
 	public static int Storm_Tornado_maxBlocksPerStorm = 200;
+	public static int Storm_Tornado_maxBlocksPerDimension = 200;
 	public static int Storm_Tornado_maxBlocksGrabbedPerTick = 5;
 	public static int Storm_Tornado_rarityOfDisintegrate = 15;
 	public static int Storm_Tornado_rarityOfBreakOnFall = 5;
@@ -130,6 +131,8 @@ public class ConfigMisc implements IConfigCategory {
 	public static String Dimension_List_WindEffects = "0,-127";
 	// NTNH start: safe-by-default dimension whitelist for tornado block destruction
 	public static String Dimension_List_TornadoGrabBlocks = "16, 18, 22, 24";
+	// NTNH start: unified per-dimension climate profiles
+	public static String Dimension_Weather_Profiles = "0, 0, false, 0, 1.0, 0, 0, false; duna, 5, false, 1800, 1.0, 10, 0, true; eve, 5, true, 800, 6.0, 3, 7, true; laythe, 5, false, 1800, 1.0, 10, 20, true; tekto, 4, false, 1800, 2.0, 10, 0, true";
 	// NTNH end
 
 	public ConfigMisc() {
