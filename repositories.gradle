@@ -1,0 +1,14 @@
+// Add any additional repositories for your dependencies here.
+
+repositories {
+    exclusiveContent {
+        forRepository {
+            mavenLocal()
+        }
+        filter {
+            includeGroup("io.github.legacymoddingmc")
+        }
+    }
+    mavenLocal()
+}
+

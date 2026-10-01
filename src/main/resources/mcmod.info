@@ -1,0 +1,16 @@
+[
+{
+  "modid": "weather2",
+  "name": "Localized Weather & Storms",
+  "description": "Localized rain and storms that evolve into deadly tornadoes and others, also some ambience effects",
+  "version": "2.3.20",
+  "mcversion": "1.7.10",
+  "url": "http://Coros.us/",
+  "updateUrl": "",
+  "authorList": ["Corosus"],
+  "credits": "",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]
