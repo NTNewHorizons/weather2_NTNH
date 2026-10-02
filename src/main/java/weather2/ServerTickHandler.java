@@ -118,6 +118,7 @@ public class ServerTickHandler {
     }
 
     public static void initialize() {
+        weather2.integration.IntegrationManager.logDiagnosticSummary();
         if (lookupDimToWeatherMan.get(Integer.valueOf(0)) == null) {
             addWorldToWeather(0);
         }

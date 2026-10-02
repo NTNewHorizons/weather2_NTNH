@@ -6,10 +6,16 @@ import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.Vec3;
 
 import CoroUtil.util.CoroUtil;
 import CoroUtil.util.CoroUtilEntity;
+import weather2.climate.ClimateProfile;
+import weather2.integration.AdapterReport;
+import weather2.integration.AdapterStatus;
+import weather2.integration.IntegrationManager;
 import weather2.volcano.VolcanoObject;
 import weather2.weathersystem.WeatherManagerServer;
 import weather2.weathersystem.storm.StormObject;
@@ -24,7 +30,14 @@ public class CommandWeather2 extends CommandBase {
         // NTNH start: command aliases normalization (/weather2 kill, /weather2 spawn, etc.)
         var2 = weather2.compat.WeatherNTNHHooks.normalizeCommandArgs(var2);
         // NTNH end
-        String helpMsgStorm = "Syntax: storm create <rain/thunder/wind/spout/hail/F0/F1/F2/F3/F4/F5/C0/C1/C2/C3/C4/C5/hurricane> <Optional: alwaysProgress>... example: storm create F1 alwaysProgress ... eg2: storm killall";
+        if (var2 != null && var2.length > 0
+            && (var2[0].equalsIgnoreCase("status") || var2[0].equalsIgnoreCase("diag")
+                || var2[0].equalsIgnoreCase("diagnostics"))) {
+            sendDiagnostics(var1);
+            return;
+        }
+
+        String helpMsgStorm = "Syntax: storm create <rain/thunder/wind/spout/hail/F0/F1/F2/F3/F4/F5/C0/C1/C2/C3/C4/C5/hurricane> <Optional: alwaysProgress>... | storm killall | status";
 
         try {
             if (var1 instanceof EntityPlayerMP) {
@@ -161,6 +174,55 @@ public class CommandWeather2 extends CommandBase {
             var9.printStackTrace();
         }
 
+    }
+
+    private void sendDiagnostics(ICommandSender sender) {
+        sender.addChatMessage(
+            new ChatComponentText(EnumChatFormatting.GOLD + "=== Weather2 / NTNH Integration Diagnostics ==="));
+        for (AdapterReport report : IntegrationManager.diagnoseAll()) {
+            EnumChatFormatting color = EnumChatFormatting.GREEN;
+            if (report.getStatus() == AdapterStatus.DEGRADED) {
+                color = EnumChatFormatting.YELLOW;
+            } else if (report.getStatus() == AdapterStatus.FAILED) {
+                color = EnumChatFormatting.RED;
+            } else if (report.getStatus() == AdapterStatus.NOT_INSTALLED) {
+                color = EnumChatFormatting.GRAY;
+            }
+
+            sender.addChatMessage(
+                new ChatComponentText(
+                    color + String.format("[%s] ", report.getStatus())
+                        + EnumChatFormatting.WHITE
+                        + report.getAdapterName()
+                        + ": "
+                        + report.getDetails()));
+            if (report.isFallbackActive()) {
+                sender.addChatMessage(
+                    new ChatComponentText(
+                        EnumChatFormatting.YELLOW + "  -> Fallback: " + report.getFallbackDescription()));
+            }
+        }
+
+        if (sender instanceof EntityPlayerMP) {
+            EntityPlayerMP player = (EntityPlayerMP) sender;
+            int dim = player.worldObj.provider.dimensionId;
+            ClimateProfile profile = weather2.compat.WeatherNTNHHooks.getProfile(dim);
+            int movingBlocks = weather2.compat.WeatherNTNHHooks.getMovingBlocksCount(dim);
+            int maxMovingBlocks = weather2.compat.WeatherNTNHHooks.getMaxMovingBlocksPerDimension();
+            sender.addChatMessage(
+                new ChatComponentText(
+                    EnumChatFormatting.AQUA + String.format(
+                        "Dim %d (%s): maxStage=%d, grab=%b, cooldown=%d | MovingBlocks: %d/%d",
+                        dim,
+                        profile.name,
+                        profile.maxStage,
+                        profile.grabBlocks,
+                        profile.deadlyCooldown,
+                        movingBlocks,
+                        maxMovingBlocks)));
+        }
+        sender.addChatMessage(
+            new ChatComponentText(EnumChatFormatting.GOLD + "================================================"));
     }
 
     public boolean canCommandSenderUseCommand(ICommandSender par1ICommandSender) {

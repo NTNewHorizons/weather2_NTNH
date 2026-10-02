@@ -4,6 +4,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import weather2.integration.AdapterReport;
+import weather2.integration.DiagnosableAdapter;
+import weather2.integration.IntegrationManager;
 import weather2.protection.BlockProtectionPipeline;
 
 /**
@@ -11,7 +14,9 @@ import weather2.protection.BlockProtectionPipeline;
  * Enforces ontological immunity for all HBM machinery, reactors, cables, and hazardous blocks,
  * with an explicit whitelist for lightweight planetary debris (waste, scrap, ash, meteorite rubble).
  */
-public class HbmProtectionAdapter {
+public class HbmProtectionAdapter implements DiagnosableAdapter {
+
+    public static final HbmProtectionAdapter INSTANCE = new HbmProtectionAdapter();
 
     public static final String HBM_PACKAGE_PREFIX = "com.hbm.";
     public static final String HBM_REGISTRY_PREFIX = "hbm:";
@@ -28,6 +33,29 @@ public class HbmProtectionAdapter {
         HBM_GRAB_WHITELIST.add("hbm:block_meteor_broken");
         HBM_GRAB_WHITELIST.add("hbm:ash");
         HBM_GRAB_WHITELIST.add("hbm:block_scrap");
+    }
+
+    @Override
+    public String getAdapterName() {
+        return "HBM Protection Adapter";
+    }
+
+    @Override
+    public String getTargetModId() {
+        return IntegrationManager.MODID_HBM;
+    }
+
+    @Override
+    public AdapterReport diagnose() {
+        if (!IntegrationManager.isHbmLoaded()) {
+            return AdapterReport.notInstalled(getAdapterName(), getTargetModId());
+        }
+
+        return AdapterReport.active(
+            getAdapterName(),
+            getTargetModId(),
+            "Ontology active (" + HBM_GRAB_WHITELIST.size()
+                + " whitelisted clutter blocks, namespace hbm:* protected)");
     }
 
     /**

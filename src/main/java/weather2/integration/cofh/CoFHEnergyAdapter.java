@@ -1,15 +1,50 @@
 package weather2.integration.cofh;
 
 import weather2.deflector.IDeflectorTE;
+import weather2.integration.AdapterReport;
+import weather2.integration.DiagnosableAdapter;
+import weather2.integration.IntegrationManager;
 
 /**
  * NTNH Deep Module: CoFH Redstone Flux (RF) Energy Adapter.
  * Bridges Redstone Flux (RF) energy grid to HBM High Energy (HE) storage.
  * Enforces the standard NTNH conversion ratio: 1 HE = 4 RF.
  */
-public class CoFHEnergyAdapter {
+public class CoFHEnergyAdapter implements DiagnosableAdapter {
+
+    public static final CoFHEnergyAdapter INSTANCE = new CoFHEnergyAdapter();
 
     public static final int RF_PER_HE = 4;
+
+    @Override
+    public String getAdapterName() {
+        return "CoFH Energy Adapter";
+    }
+
+    @Override
+    public String getTargetModId() {
+        return IntegrationManager.MODID_COFH;
+    }
+
+    @Override
+    public AdapterReport diagnose() {
+        if (!IntegrationManager.isCoFHCoreLoaded()) {
+            return AdapterReport.notInstalled(getAdapterName(), getTargetModId());
+        }
+
+        try {
+            Class.forName("cofh.api.energy.IEnergyReceiver");
+            return AdapterReport.active(
+                getAdapterName(),
+                getTargetModId(),
+                "cofh.api.energy.IEnergyReceiver linked, 1 HE = 4 RF bridge active");
+        } catch (Throwable t) {
+            return AdapterReport.failed(
+                getAdapterName(),
+                getTargetModId(),
+                "cofh.api.energy.IEnergyReceiver missing from classpath (" + t.getMessage() + ")");
+        }
+    }
 
     /**
      * Converts HE energy amount to RF equivalent, capped at Integer.MAX_VALUE.

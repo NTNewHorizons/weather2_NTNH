@@ -3,12 +3,18 @@ package weather2.integration.hbm;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
+import weather2.integration.AdapterReport;
+import weather2.integration.DiagnosableAdapter;
+import weather2.integration.IntegrationManager;
+
 /**
  * NTNH Deep Module: HBM NTM Space & Celestial Atmosphere Adapter.
  * Encapsulates dynamic dimension ID resolution from SpaceConfig and
  * vacuum world atmosphere detection via WorldProviderCelestial.hasWeatherCycle().
  */
-public class HbmSpaceAdapter {
+public class HbmSpaceAdapter implements DiagnosableAdapter {
+
+    public static final HbmSpaceAdapter INSTANCE = new HbmSpaceAdapter();
 
     private static Field worldProviderField = null;
     private static Field providerDimensionIdField = null;
@@ -18,6 +24,7 @@ public class HbmSpaceAdapter {
 
     private static Class<?> spaceConfigClass = null;
     private static boolean spaceConfigReflectionInit = false;
+    private static String spaceConfigFailureReason = null;
 
     private static void initCelestialReflection(Class<?> worldClass) {
         if (celestialReflectionInit) return;
@@ -40,7 +47,68 @@ public class HbmSpaceAdapter {
         spaceConfigReflectionInit = true;
         try {
             spaceConfigClass = Class.forName("com.hbm.config.SpaceConfig");
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            spaceConfigFailureReason = t.getClass()
+                .getSimpleName() + ": "
+                + t.getMessage();
+        }
+    }
+
+    @Override
+    public String getAdapterName() {
+        return "HBM Space Adapter";
+    }
+
+    @Override
+    public String getTargetModId() {
+        return IntegrationManager.MODID_HBM;
+    }
+
+    @Override
+    public AdapterReport diagnose() {
+        if (!IntegrationManager.isHbmLoaded()) {
+            return AdapterReport.notInstalled(getAdapterName(), getTargetModId());
+        }
+
+        initSpaceConfig();
+        if (spaceConfigClass == null) {
+            return AdapterReport.degraded(
+                getAdapterName(),
+                getTargetModId(),
+                "SpaceConfig class unavailable (" + spaceConfigFailureReason + ")",
+                "Using NTNH static default dimension IDs (Duna:16, Eve:18, Laythe:22, Tekto:24)");
+        }
+
+        String[] requiredFields = new String[] { "dunaDimension", "eveDimension", "laytheDimension", "tektoDimension",
+            "moonDimension", "minmusDimension", "ikeDimension", "dresDimension", "mohoDimension", "orbitDimension",
+            "thatmoDimension" };
+        int resolved = 0;
+        StringBuilder missing = new StringBuilder();
+        for (String fieldName : requiredFields) {
+            try {
+                spaceConfigClass.getField(fieldName);
+                resolved++;
+            } catch (Throwable t) {
+                if (missing.length() > 0) missing.append(", ");
+                missing.append(fieldName);
+            }
+        }
+
+        if (resolved == requiredFields.length) {
+            return AdapterReport.active(
+                getAdapterName(),
+                getTargetModId(),
+                "SpaceConfig dynamically linked (" + resolved
+                    + "/"
+                    + requiredFields.length
+                    + " celestial IDs verified)");
+        } else {
+            return AdapterReport.degraded(
+                getAdapterName(),
+                getTargetModId(),
+                "Missing SpaceConfig field(s): [" + missing + "]",
+                "Unresolved planetary IDs fall back to NTNH static defaults");
+        }
     }
 
     /**
@@ -149,5 +217,20 @@ public class HbmSpaceAdapter {
             }
         } catch (Throwable ignored) {}
         return true;
+    }
+
+    public static void setSpaceConfigClassForTesting(Class<?> clazz) {
+        spaceConfigClass = clazz;
+        spaceConfigReflectionInit = true;
+        spaceConfigFailureReason = null;
+    }
+
+    public static void resetForTesting() {
+        spaceConfigClass = null;
+        spaceConfigReflectionInit = false;
+        spaceConfigFailureReason = null;
+        celestialReflectionInit = false;
+        celestialProviderClass = null;
+        celestialHasWeatherCycleMethod = null;
     }
 }
