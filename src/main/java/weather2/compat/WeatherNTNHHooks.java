@@ -120,6 +120,15 @@ public class WeatherNTNHHooks {
         return BlockProtectionPipeline.isHbmBlockWhitelisted(blockObj);
     }
 
+    public static boolean canGrab(weather2.protection.BlockContext ctx) {
+        return BlockProtectionPipeline.canGrab(ctx);
+    }
+
+    public static boolean canGrab(net.minecraft.world.World world, int x, int y, int z, net.minecraft.block.Block block,
+        StormObject storm) {
+        return BlockProtectionPipeline.canGrab(world, x, y, z, block, storm);
+    }
+
     // ----------------------------------------------------
     // Deflector & Energy Hooks
     // ----------------------------------------------------

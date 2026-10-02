@@ -4,21 +4,23 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
 
+import net.minecraft.block.Block;
+import net.minecraft.world.World;
+
 import weather2.climate.ClimateEngine;
 import weather2.config.ConfigMisc;
 import weather2.integration.hbm.HbmProtectionAdapter;
+import weather2.protection.policy.HardnessThresholdPolicy;
+import weather2.protection.policy.HbmOntologyPolicy;
+import weather2.protection.policy.InstrumentsProtectionPolicy;
+import weather2.protection.policy.PreflightBudgetPolicy;
+import weather2.protection.policy.TerrainProtectionPolicy;
+import weather2.protection.policy.TileEntityProtectionPolicy;
 import weather2.weathersystem.storm.StormObject;
 
 /**
  * NTNH Deep Module: Feature-Based Block Protection & Entity Budgeting Pipeline.
- * Enforces the 6-barrier defense-in-depth immunity matrix:
- * 1. Weather2 Instruments immunity
- * 2. HBM NTM namespace protection with whitelisting
- * 3. TileEntity and BlockContainer ontological immunity
- * 4. Unbreakable blocks check (hardness < 0)
- * 5. Structural and planetary terrain protection (BlockLog, dirt, grass, sand)
- * 6. Hardness fallback check (only lightweight debris without TileEntity)
- * Also enforces the configurable per-dimension moving blocks budget.
+ * Coordinates CompositeGrabPolicy decision chains and enforces the moving blocks entity budget.
  */
 public class BlockProtectionPipeline {
 
@@ -26,6 +28,28 @@ public class BlockProtectionPipeline {
 
     private static Field configMaxBlocksPerDimensionField = null;
     private static boolean configMaxBlocksFieldInitialized = false;
+
+    private static final CompositeGrabPolicy DEFAULT_POLICY = new CompositeGrabPolicy()
+        .addPolicy(new PreflightBudgetPolicy())
+        .addPolicy(new InstrumentsProtectionPolicy())
+        .addPolicy(new TileEntityProtectionPolicy())
+        .addPolicy(new HbmOntologyPolicy())
+        .addPolicy(new TerrainProtectionPolicy())
+        .addPolicy(new HardnessThresholdPolicy());
+
+    private static final CompositeGrabPolicy STATIC_PROTECTION_POLICY = new CompositeGrabPolicy()
+        .addPolicy(new InstrumentsProtectionPolicy())
+        .addPolicy(new TileEntityProtectionPolicy())
+        .addPolicy(new HbmOntologyPolicy())
+        .addPolicy(new TerrainProtectionPolicy());
+
+    public static CompositeGrabPolicy getDefaultPolicy() {
+        return DEFAULT_POLICY;
+    }
+
+    public static CompositeGrabPolicy getStaticProtectionPolicy() {
+        return STATIC_PROTECTION_POLICY;
+    }
 
     public static int getMaxMovingBlocksPerDimension() {
         if (!configMaxBlocksFieldInitialized) {
@@ -112,7 +136,6 @@ public class BlockProtectionPipeline {
             return false;
         }
 
-        // Cap on EntityMovingBlock per dimension to protect server TPS (O(1) counter)
         int currentBlocks = getMovingBlocksCount(dim);
         int maxBlocks = getMaxMovingBlocksPerDimension();
         if (currentBlocks >= maxBlocks) {
@@ -122,61 +145,9 @@ public class BlockProtectionPipeline {
         return true;
     }
 
-    // ----------------------------------------------------
-    // Feature-Based Block Protection & Immunity Matrix
-    // ----------------------------------------------------
-    private static Class<?> tileEntityProviderClass = null;
-    private static Class<?> blockContainerClass = null;
-    private static Class<?> blockLogClass = null;
-    private static Class<?> blockChestClass = null;
-    private static Class<?> blockJukeboxClass = null;
-    private static Method blockHasTileEntityMeta = null;
-    private static Method blockHasTileEntityNoArg = null;
-    private static Field blockHardnessField = null;
-    private static boolean blockReflectionInit = false;
-
     private static Object fmlBlockRegistry = null;
     private static Method getNameForObjectMethod = null;
     private static boolean registryReflectionFailed = false;
-
-    private static void initBlockReflection() {
-        if (blockReflectionInit) return;
-        blockReflectionInit = true;
-        try {
-            tileEntityProviderClass = Class.forName("net.minecraft.block.ITileEntityProvider");
-        } catch (Throwable ignored) {}
-        try {
-            blockContainerClass = Class.forName("net.minecraft.block.BlockContainer");
-        } catch (Throwable ignored) {}
-        try {
-            blockLogClass = Class.forName("net.minecraft.block.BlockLog");
-        } catch (Throwable ignored) {}
-        try {
-            blockChestClass = Class.forName("net.minecraft.block.BlockChest");
-        } catch (Throwable ignored) {}
-        try {
-            blockJukeboxClass = Class.forName("net.minecraft.block.BlockJukebox");
-        } catch (Throwable ignored) {}
-
-        try {
-            Class<?> blockClass = Class.forName("net.minecraft.block.Block");
-            try {
-                blockHasTileEntityMeta = blockClass.getMethod("hasTileEntity", int.class);
-            } catch (Throwable ignored) {}
-            try {
-                blockHasTileEntityNoArg = blockClass.getMethod("hasTileEntity");
-            } catch (Throwable ignored) {}
-            try {
-                blockHardnessField = blockClass.getDeclaredField("blockHardness");
-                blockHardnessField.setAccessible(true);
-            } catch (Throwable t) {
-                try {
-                    blockHardnessField = blockClass.getDeclaredField("field_149782_v");
-                    blockHardnessField.setAccessible(true);
-                } catch (Throwable ignored) {}
-            }
-        } catch (Throwable ignored) {}
-    }
 
     public static String getBlockRegistryName(Object blockObj) {
         if (blockObj == null || registryReflectionFailed) return null;
@@ -200,92 +171,31 @@ public class BlockProtectionPipeline {
     }
 
     /**
+     * Context-aware evaluation of whether a block can be grabbed by a storm.
+     */
+    public static boolean canGrab(BlockContext ctx) {
+        return DEFAULT_POLICY.canGrab(ctx);
+    }
+
+    public static boolean canGrab(World world, int x, int y, int z, Block block, StormObject storm) {
+        BlockContext ctx = BlockContext.getPooled(world, x, y, z, block, storm);
+        return DEFAULT_POLICY.canGrab(ctx);
+    }
+
+    public static boolean canGrab(World world, Block block) {
+        return canGrab(world, 0, 0, 0, block, null);
+    }
+
+    /**
      * Replaces WeatherUtil.safetyCheck() with a feature-based ontology check.
      * Returns true if the block is PROTECTED (IMMUNE) and MUST NOT be ripped by tornadoes.
      */
     public static boolean isBlockProtected(Object blockObj) {
         if (blockObj == null) return true;
-        initBlockReflection();
-
-        Class<?> clazz = blockObj.getClass();
-
-        // 1. Weather2 Instruments: absolute immunity
-        if (clazz.getName()
-            .startsWith("weather2.block.")) {
-            return true;
-        }
-
-        // 2. Ontological TileEntity / Container checks:
-        // A. ITileEntityProvider interface
-        if (tileEntityProviderClass != null && tileEntityProviderClass.isAssignableFrom(clazz)) {
-            return true;
-        }
-
-        // B. BlockContainer or specific container subclasses
-        if (blockContainerClass != null && blockContainerClass.isAssignableFrom(clazz)) {
-            return true;
-        }
-        if (blockChestClass != null && blockChestClass.isAssignableFrom(clazz)) {
-            return true;
-        }
-        if (blockJukeboxClass != null && blockJukeboxClass.isAssignableFrom(clazz)) {
-            return true;
-        }
-
-        // C. HBM Namespace Protection: All machines, reactors, cables, and blocks are immune unless whitelisted
-        String regName = getBlockRegistryName(blockObj);
-        if (HbmProtectionAdapter.isHbmBlock(clazz, regName)) {
-            if (HbmProtectionAdapter.isHbmBlockProtected(blockObj, clazz, regName)) {
-                return true;
-            }
-        }
-
-        // D. hasTileEntity(int metadata) Forge method (cached)
-        if (blockHasTileEntityMeta != null) {
-            try {
-                if (((Boolean) blockHasTileEntityMeta.invoke(blockObj, 0)).booleanValue()) {
-                    return true;
-                }
-            } catch (Throwable ignored) {}
-        } else {
-            try {
-                Method m = clazz.getMethod("hasTileEntity", int.class);
-                if (((Boolean) m.invoke(blockObj, 0)).booleanValue()) {
-                    return true;
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        // E. hasTileEntity() parameterless method (cached)
-        if (blockHasTileEntityNoArg != null) {
-            try {
-                if (((Boolean) blockHasTileEntityNoArg.invoke(blockObj)).booleanValue()) {
-                    return true;
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        // 3. Unbreakable blocks check (hardness < 0: Bedrock, forcefields, shielded portals)
-        if (blockHardnessField != null) {
-            try {
-                float hardness = blockHardnessField.getFloat(blockObj);
-                if (hardness < 0.0F) return true;
-            } catch (Throwable ignored) {}
-        } else {
-            for (Class<?> c = clazz; c != null && c != Object.class; c = c.getSuperclass()) {
-                try {
-                    Field f = c.getDeclaredField("blockHardness");
-                    f.setAccessible(true);
-                    if (f.getFloat(blockObj) < 0.0F) return true;
-                } catch (Throwable ignored) {}
-                try {
-                    Field f = c.getDeclaredField("field_149782_v");
-                    f.setAccessible(true);
-                    if (f.getFloat(blockObj) < 0.0F) return true;
-                } catch (Throwable ignored) {}
-            }
-        }
-
+        BlockContext ctx = BlockContext.of(blockObj);
+        GrabDecision decision = STATIC_PROTECTION_POLICY.evaluate(ctx);
+        if (decision == GrabDecision.DENY) return true;
+        if (decision == GrabDecision.ALLOW) return false;
         return false;
     }
 }

@@ -118,7 +118,8 @@ public class TornadoHelper {
                                     && this.tryRipCount < tryRipMax) {
                                     Block blockID1 = parWorld.getBlock(d2, tryY1, tryZ1);
                                     boolean performed = false;
-                                    if (!CoroUtilBlock.isAir(blockID1) && this.canGrab(parWorld, blockID1)) {
+                                    if (!CoroUtilBlock.isAir(blockID1)
+                                        && this.canGrab(parWorld, d2, tryY1, tryZ1, blockID1)) {
                                         ++this.tryRipCount;
                                         seesLight = this.tryRip(parWorld, d2, tryY1, tryZ1, true);
                                         performed = seesLight;
@@ -143,7 +144,7 @@ public class TornadoHelper {
                         dist = (double) MathHelper.sqrt_double(var28 * var28 + var29 * var29);
                         if (dist < (double) (this.tornadoBaseSize / 2 + var27 / 2) && this.tryRipCount < tryRipMax) {
                             Block var30 = parWorld.getBlock(tryX, tryY, tryZ);
-                            if (!CoroUtilBlock.isAir(var30) && this.canGrab(parWorld, var30)) {
+                            if (!CoroUtilBlock.isAir(var30) && this.canGrab(parWorld, tryX, tryY, tryZ, var30)) {
                                 ++this.tryRipCount;
                                 this.tryRip(parWorld, tryX, tryY, tryZ, true);
                             }
@@ -244,8 +245,13 @@ public class TornadoHelper {
         }
     }
 
+    public boolean canGrab(World parWorld, int x, int y, int z, Block blockID) {
+        if (CoroUtilBlock.isAir(blockID)) return false;
+        return weather2.compat.WeatherNTNHHooks.canGrab(parWorld, x, y, z, blockID, this.storm);
+    }
+
     public boolean canGrab(World parWorld, Block blockID) {
-        return !CoroUtilBlock.isAir(blockID) && WeatherUtil.shouldGrabBlock(parWorld, blockID);
+        return canGrab(parWorld, 0, 0, 0, blockID);
     }
 
     public boolean forceRotate(World parWorld) {
