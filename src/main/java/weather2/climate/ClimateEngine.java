@@ -1,9 +1,9 @@
 package weather2.climate;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 
 import weather2.config.ConfigMisc;
+import weather2.integration.hbm.HbmSpaceAdapter;
 import weather2.weathersystem.storm.StormObject;
 
 /**
@@ -36,32 +36,9 @@ public class ClimateEngine {
             return Integer.parseInt(token);
         } catch (NumberFormatException ignored) {}
 
-        // Reflective NTM SpaceConfig lookup
-        try {
-            Class<?> sc = Class.forName("com.hbm.config.SpaceConfig");
-            if (token.equals("duna")) return sc.getField("dunaDimension")
-                .getInt(null);
-            if (token.equals("eve")) return sc.getField("eveDimension")
-                .getInt(null);
-            if (token.equals("laythe")) return sc.getField("laytheDimension")
-                .getInt(null);
-            if (token.equals("tekto")) return sc.getField("tektoDimension")
-                .getInt(null);
-            if (token.equals("moon") || token.equals("mun")) return sc.getField("moonDimension")
-                .getInt(null);
-            if (token.equals("minmus")) return sc.getField("minmusDimension")
-                .getInt(null);
-            if (token.equals("ike")) return sc.getField("ikeDimension")
-                .getInt(null);
-            if (token.equals("dres")) return sc.getField("dresDimension")
-                .getInt(null);
-            if (token.equals("moho")) return sc.getField("mohoDimension")
-                .getInt(null);
-            if (token.equals("orbit")) return sc.getField("orbitDimension")
-                .getInt(null);
-            if (token.equals("thatmo")) return sc.getField("thatmoDimension")
-                .getInt(null);
-        } catch (Throwable ignored) {}
+        // Dynamic NTM SpaceConfig lookup via HbmSpaceAdapter
+        Integer spaceDim = HbmSpaceAdapter.resolveSpaceDimension(token);
+        if (spaceDim != null) return spaceDim.intValue();
 
         // Safe NTNH fallbacks if HBM is not loaded or reflection fails
         if (token.equals("overworld")) return 0;
@@ -81,62 +58,12 @@ public class ClimateEngine {
         return -999;
     }
 
-    private static Field worldProviderField = null;
-    private static Field providerDimensionIdField = null;
-    private static Class<?> celestialProviderClass = null;
-    private static Method celestialHasWeatherCycleMethod = null;
-    private static boolean celestialReflectionInit = false;
-
-    private static void initCelestialReflection(Class<?> worldClass) {
-        if (celestialReflectionInit) return;
-        celestialReflectionInit = true;
-        try {
-            worldProviderField = worldClass.getField("provider");
-        } catch (Throwable t) {
-            try {
-                worldProviderField = worldClass.getField("field_73011_v");
-            } catch (Throwable ignored) {}
-        }
-        try {
-            celestialProviderClass = Class.forName("com.hbm.dim.WorldProviderCelestial");
-            celestialHasWeatherCycleMethod = celestialProviderClass.getMethod("hasWeatherCycle");
-        } catch (Throwable ignored) {}
-    }
-
     /**
      * Checks if a world has an atmosphere based on NTM's WorldProviderCelestial.hasWeatherCycle().
      * On vacuum worlds (Moon, Minmus, Ike, Dres, Moho, Thatmo), returns false.
      */
     public static boolean isAtmosphericWorld(Object worldObj) {
-        if (worldObj == null) return false;
-        try {
-            initCelestialReflection(worldObj.getClass());
-            if (worldProviderField == null) return true;
-            Object provider = worldProviderField.get(worldObj);
-            if (provider == null) return false;
-
-            if (providerDimensionIdField == null) {
-                try {
-                    providerDimensionIdField = provider.getClass()
-                        .getField("dimensionId");
-                } catch (Throwable t) {
-                    try {
-                        providerDimensionIdField = provider.getClass()
-                            .getField("field_76574_g");
-                    } catch (Throwable ignored) {}
-                }
-            }
-            if (providerDimensionIdField != null) {
-                int dim = providerDimensionIdField.getInt(provider);
-                if (dim == 0) return true; // Overworld always atmospheric
-            }
-
-            if (celestialProviderClass != null && celestialHasWeatherCycleMethod != null
-                && celestialProviderClass.isInstance(provider)) {
-                return ((Boolean) celestialHasWeatherCycleMethod.invoke(provider)).booleanValue();
-            }
-        } catch (Throwable ignored) {}
-        return true;
+        return HbmSpaceAdapter.isAtmosphericWorld(worldObj);
     }
 
     public static synchronized void ensureProfilesLoaded() {

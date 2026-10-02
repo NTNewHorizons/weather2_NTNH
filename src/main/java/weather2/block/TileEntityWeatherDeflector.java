@@ -10,11 +10,13 @@ import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.Vec3;
 import net.minecraftforge.common.util.ForgeDirection;
 
-import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.Optional;
 import weather2.ServerTickHandler;
 import weather2.compat.WeatherNTNHHooks;
 import weather2.deflector.DeflectorState;
+import weather2.integration.IntegrationManager;
+import weather2.integration.cofh.CoFHEnergyAdapter;
+import weather2.integration.hbm.HbmEnergyAdapter;
 import weather2.weathersystem.WeatherManagerServer;
 import weather2.weathersystem.storm.StormObject;
 
@@ -99,7 +101,7 @@ public class TileEntityWeatherDeflector extends TileEntity
             long time = worldObj.getTotalWorldTime();
 
             // Periodic connection refresh for NTM MK2 energy network (staggered by coordinates)
-            if (Loader.isModLoaded("hbm") && (time + (xCoord ^ zCoord)) % 20 == 0) {
+            if (IntegrationManager.isHbmLoaded() && (time + (xCoord ^ zCoord)) % 20 == 0) {
                 updateHbmConnections();
             }
 
@@ -206,22 +208,18 @@ public class TileEntityWeatherDeflector extends TileEntity
 
     @Optional.Method(modid = "hbm")
     private void updateHbmConnections() {
-        for (ForgeDirection dir : ForgeDirection.VALID_DIRECTIONS) {
-            this.trySubscribe(worldObj, xCoord + dir.offsetX, yCoord + dir.offsetY, zCoord + dir.offsetZ, dir);
-        }
+        HbmEnergyAdapter.updateConnections(this, worldObj, xCoord, yCoord, zCoord);
     }
 
     @Optional.Method(modid = "hbm")
     private void unsubscribeHbmConnections() {
-        for (ForgeDirection dir : ForgeDirection.VALID_DIRECTIONS) {
-            this.tryUnsubscribe(worldObj, xCoord + dir.offsetX, yCoord + dir.offsetY, zCoord + dir.offsetZ);
-        }
+        HbmEnergyAdapter.unsubscribeConnections(this, worldObj, xCoord, yCoord, zCoord);
     }
 
     @Override
     public void invalidate() {
         super.invalidate();
-        if (worldObj != null && !worldObj.isRemote && Loader.isModLoaded("hbm")) {
+        if (worldObj != null && !worldObj.isRemote && IntegrationManager.isHbmLoaded()) {
             unsubscribeHbmConnections();
         }
     }
@@ -229,7 +227,7 @@ public class TileEntityWeatherDeflector extends TileEntity
     @Override
     public void onChunkUnload() {
         super.onChunkUnload();
-        if (worldObj != null && !worldObj.isRemote && Loader.isModLoaded("hbm")) {
+        if (worldObj != null && !worldObj.isRemote && IntegrationManager.isHbmLoaded()) {
             unsubscribeHbmConnections();
         }
     }
@@ -304,7 +302,7 @@ public class TileEntityWeatherDeflector extends TileEntity
     @Override
     @Optional.Method(modid = "hbm")
     public void setPower(long power) {
-        this.power = Math.max(0, Math.min(maxPower, power));
+        this.power = HbmEnergyAdapter.clampPower(power, maxPower);
     }
 
     @Override
@@ -345,25 +343,23 @@ public class TileEntityWeatherDeflector extends TileEntity
     @Override
     @Optional.Method(modid = "CoFHCore")
     public int receiveEnergy(ForgeDirection from, int maxReceive, boolean simulate) {
-        // 1 HE = 4 RF
-        long heEquivalent = maxReceive / 4;
-        long acceptedHE = Math.min(maxPower - this.power, heEquivalent);
-        if (!simulate) {
-            this.power += acceptedHE;
+        int acceptedRF = CoFHEnergyAdapter.calculateAcceptedRF(this.power, maxPower, maxReceive);
+        if (!simulate && acceptedRF > 0) {
+            this.power += CoFHEnergyAdapter.rfToHe(acceptedRF);
         }
-        return (int) (acceptedHE * 4);
+        return acceptedRF;
     }
 
     @Override
     @Optional.Method(modid = "CoFHCore")
     public int getEnergyStored(ForgeDirection from) {
-        return (int) Math.min(Integer.MAX_VALUE, this.power * 4);
+        return CoFHEnergyAdapter.getEnergyStored(this.power);
     }
 
     @Override
     @Optional.Method(modid = "CoFHCore")
     public int getMaxEnergyStored(ForgeDirection from) {
-        return (int) Math.min(Integer.MAX_VALUE, maxPower * 4);
+        return CoFHEnergyAdapter.getMaxEnergyStored(maxPower);
     }
     // NTNH end
 }

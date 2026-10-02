@@ -63,23 +63,8 @@ public class DSurroundBridge {
         } catch (Throwable ignored) {}
     }
 
-    private static boolean dsurroundInit = false;
-    private static Method dsurroundSetIntensity = null;
-
     public static void updateDSurroundIntensity(float strength) {
-        try {
-            if (!dsurroundInit) {
-                dsurroundInit = true;
-                try {
-                    Class<?> dsurroundWeather = Class
-                        .forName("org.blockartistry.mod.DynSurround.client.weather.Weather");
-                    dsurroundSetIntensity = dsurroundWeather.getMethod("setIntensity", float.class);
-                } catch (Throwable ignored) {}
-            }
-            if (dsurroundSetIntensity != null) {
-                dsurroundSetIntensity.invoke(null, strength);
-            }
-        } catch (Throwable ignored) {}
+        weather2.integration.dsurround.DSurroundWeatherAdapter.setIntensity(strength);
     }
 
     private static Object cachedMinecraft = null;

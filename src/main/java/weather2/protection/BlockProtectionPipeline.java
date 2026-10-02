@@ -2,12 +2,11 @@ package weather2.protection;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import weather2.climate.ClimateEngine;
 import weather2.config.ConfigMisc;
+import weather2.integration.hbm.HbmProtectionAdapter;
 import weather2.weathersystem.storm.StormObject;
 
 /**
@@ -140,20 +139,6 @@ public class BlockProtectionPipeline {
     private static Method getNameForObjectMethod = null;
     private static boolean registryReflectionFailed = false;
 
-    private static final Set<String> HBM_GRAB_WHITELIST = new HashSet<String>();
-
-    static {
-        // Only lightweight decoration/clutter blocks from HBM are allowed to be grabbed on hostile planets
-        HBM_GRAB_WHITELIST.add("hbm:block_waste");
-        HBM_GRAB_WHITELIST.add("hbm:waste_earth");
-        HBM_GRAB_WHITELIST.add("hbm:waste_mycelium");
-        HBM_GRAB_WHITELIST.add("hbm:waste_sand");
-        HBM_GRAB_WHITELIST.add("hbm:block_meteor");
-        HBM_GRAB_WHITELIST.add("hbm:block_meteor_broken");
-        HBM_GRAB_WHITELIST.add("hbm:ash");
-        HBM_GRAB_WHITELIST.add("hbm:block_scrap");
-    }
-
     private static void initBlockReflection() {
         if (blockReflectionInit) return;
         blockReflectionInit = true;
@@ -211,11 +196,7 @@ public class BlockProtectionPipeline {
     }
 
     public static boolean isHbmBlockWhitelisted(Object blockObj) {
-        String regName = getBlockRegistryName(blockObj);
-        if (regName != null && HBM_GRAB_WHITELIST.contains(regName)) {
-            return true;
-        }
-        return false;
+        return HbmProtectionAdapter.isHbmBlockWhitelisted(blockObj);
     }
 
     /**
@@ -252,12 +233,10 @@ public class BlockProtectionPipeline {
         }
 
         // C. HBM Namespace Protection: All machines, reactors, cables, and blocks are immune unless whitelisted
-        for (Class<?> curr = clazz; curr != null && curr != Object.class; curr = curr.getSuperclass()) {
-            String name = curr.getName();
-            if (name.startsWith("com.hbm.")) {
-                if (!isHbmBlockWhitelisted(blockObj)) {
-                    return true;
-                }
+        String regName = getBlockRegistryName(blockObj);
+        if (HbmProtectionAdapter.isHbmBlock(clazz, regName)) {
+            if (HbmProtectionAdapter.isHbmBlockProtected(blockObj, clazz, regName)) {
+                return true;
             }
         }
 
