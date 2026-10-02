@@ -1,6 +1,7 @@
 package weather2.compat;
 
 import weather2.climate.ClimateEngine;
+import weather2.climate.ClimateProfile;
 import weather2.deflector.DeflectorPowerEngine;
 import weather2.integration.DSurroundBridge;
 import weather2.protection.BlockProtectionPipeline;
@@ -32,11 +33,11 @@ public class WeatherNTNHHooks {
         ClimateEngine.ensureProfilesLoaded();
     }
 
-    public static ClimateEngine.ClimateProfile getProfile(int dim) {
+    public static ClimateProfile getProfile(int dim) {
         return ClimateEngine.getProfile(dim);
     }
 
-    public static ClimateEngine.ClimateProfile getProfile(StormObject so) {
+    public static ClimateProfile getProfile(StormObject so) {
         return ClimateEngine.getProfile(so);
     }
 

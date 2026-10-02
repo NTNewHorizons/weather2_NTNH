@@ -2,10 +2,6 @@ package weather2.climate;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 
 import weather2.config.ConfigMisc;
 import weather2.weathersystem.storm.StormObject;
@@ -23,62 +19,11 @@ public class ClimateEngine {
     public static final int DIM_LAYTHE = 22;
     public static final int DIM_TEKTO = 24;
 
-    public static class ClimateProfile {
-
-        public final int dim;
-        public final String name;
-        public final boolean weatherEnabled;
-        public final int maxStage;
-        public final boolean alwaysProgresses;
-        public final int deadlyCooldown;
-        public final float lightningMultiplier;
-        public final int landSpawnOdds;
-        public final int oceanSpawnOdds;
-        public final boolean grabBlocks;
-
-        public ClimateProfile(int dim, String name, boolean weatherEnabled, int maxStage, boolean alwaysProgresses,
-            int deadlyCooldown, float lightningMultiplier, int landSpawnOdds, int oceanSpawnOdds, boolean grabBlocks) {
-            this.dim = dim;
-            this.name = name;
-            this.weatherEnabled = weatherEnabled;
-            this.maxStage = maxStage;
-            this.alwaysProgresses = alwaysProgresses;
-            this.deadlyCooldown = deadlyCooldown;
-            this.lightningMultiplier = lightningMultiplier;
-            this.landSpawnOdds = landSpawnOdds;
-            this.oceanSpawnOdds = oceanSpawnOdds;
-            this.grabBlocks = grabBlocks;
-        }
-
-        public static ClimateProfile createDefault(int dim) {
-            return new ClimateProfile(dim, "default_" + dim, false, 0, false, 0, 1.0F, 0, 0, false);
-        }
-
-        @Override
-        public String toString() {
-            return String.format(
-                "Profile[%s/dim=%d, maxStage=%d, alwaysProgress=%b, cooldown=%d, lightning=%.1fx, landOdds=%d, oceanOdds=%d, grab=%b]",
-                name,
-                dim,
-                maxStage,
-                alwaysProgresses,
-                deadlyCooldown,
-                lightningMultiplier,
-                landSpawnOdds,
-                oceanSpawnOdds,
-                grabBlocks);
-        }
-    }
-
     public static final String DEFAULT_WEATHER_PROFILES = "0, 3, false, 0, 1.0, 0, 0, false; "
         + "duna, 9, false, 1800, 1.0, 10, 0, true; "
         + "eve, 9, true, 800, 6.0, 3, 7, true; "
         + "laythe, 9, false, 1800, 1.0, 10, 20, true; "
         + "tekto, 8, false, 1800, 2.0, 10, 0, true";
-
-    private static String lastProfilesConfig = null;
-    private static Map<Integer, ClimateProfile> profiles = new HashMap<Integer, ClimateProfile>();
-    private static Set<Integer> allowedGrabDims = new HashSet<Integer>();
 
     /**
      * Resolves dimension IDs dynamically from NTM SpaceConfig or safe fallback constants.
@@ -200,118 +145,16 @@ public class ClimateEngine {
             Field f = ConfigMisc.class.getField("Dimension_Weather_Profiles");
             cfg = (String) f.get(null);
         } catch (Throwable ignored) {}
-
-        if (cfg == null || cfg.trim()
-            .isEmpty()) {
-            cfg = DEFAULT_WEATHER_PROFILES;
-        }
-
-        if (cfg.equals(lastProfilesConfig)) {
-            return;
-        }
-
-        Map<Integer, ClimateProfile> map = new HashMap<Integer, ClimateProfile>();
-        Set<Integer> grabDims = new HashSet<Integer>();
-
-        String[] lines = cfg.split("[;\\r\\n]+");
-        for (String rawLine : lines) {
-            String line = rawLine.trim();
-            if (line.isEmpty() || line.startsWith("#")) continue;
-
-            String[] parts = line.split(",");
-            if (parts.length < 6) continue;
-
-            String dimToken = parts[0].trim();
-            int dim = resolveDimensionId(dimToken);
-            if (dim == -999) continue;
-
-            int maxStage = 0;
-            try {
-                maxStage = Integer.parseInt(parts[1].trim());
-            } catch (Throwable ignored) {}
-            // Normalize Fujita 1..5 to engine stages 5..9 (STATE_STAGE1..STATE_STAGE5)
-            if (maxStage > 0 && maxStage <= 5) {
-                maxStage = maxStage + 4;
-            } else if (maxStage == 0 && (dim == 0 || dimToken.equalsIgnoreCase("overworld") || dimToken.equals("0"))) {
-                maxStage = 3; // STATE_HAIL (precipitation/thunder/wind/hail only, zero tornadoes)
-            }
-
-            boolean alwaysProgresses = false;
-            int deadlyCooldown = 1800;
-            float lightningMul = 1.0F;
-            int landSpawnOdds = 10;
-            int oceanSpawnOdds = 0;
-            boolean grabBlocks = false;
-
-            if (parts.length >= 8) {
-                try {
-                    alwaysProgresses = Boolean.parseBoolean(parts[2].trim());
-                } catch (Throwable ignored) {}
-                try {
-                    deadlyCooldown = Integer.parseInt(parts[3].trim());
-                } catch (Throwable ignored) {}
-                try {
-                    lightningMul = Float.parseFloat(parts[4].trim());
-                } catch (Throwable ignored) {}
-                try {
-                    landSpawnOdds = Integer.parseInt(parts[5].trim());
-                } catch (Throwable ignored) {}
-                try {
-                    oceanSpawnOdds = Integer.parseInt(parts[6].trim());
-                } catch (Throwable ignored) {}
-                try {
-                    grabBlocks = Boolean.parseBoolean(parts[7].trim());
-                } catch (Throwable ignored) {}
-            } else if (parts.length >= 6) {
-                try {
-                    deadlyCooldown = Integer.parseInt(parts[2].trim());
-                } catch (Throwable ignored) {}
-                try {
-                    lightningMul = Float.parseFloat(parts[3].trim());
-                } catch (Throwable ignored) {}
-                try {
-                    landSpawnOdds = Integer.parseInt(parts[4].trim());
-                } catch (Throwable ignored) {}
-                try {
-                    grabBlocks = Boolean.parseBoolean(parts[5].trim());
-                } catch (Throwable ignored) {}
-                alwaysProgresses = (maxStage >= 9 && deadlyCooldown <= 1000);
-                if (dimToken.equalsIgnoreCase("laythe") || dimToken.equalsIgnoreCase("eve")) {
-                    oceanSpawnOdds = landSpawnOdds * 2;
-                }
-            }
-
-            ClimateProfile prof = new ClimateProfile(
-                dim,
-                dimToken,
-                true,
-                maxStage,
-                alwaysProgresses,
-                deadlyCooldown,
-                lightningMul,
-                landSpawnOdds,
-                oceanSpawnOdds,
-                grabBlocks);
-            map.put(dim, prof);
-            if (grabBlocks) {
-                grabDims.add(dim);
-            }
-        }
-
-        profiles = map;
-        allowedGrabDims = grabDims;
-        lastProfilesConfig = cfg;
+        ClimateProfileRegistry.loadFromConfig(cfg);
     }
 
     public static ClimateProfile getProfile(int dim) {
         ensureProfilesLoaded();
-        ClimateProfile p = profiles.get(dim);
-        if (p != null) return p;
-        return ClimateProfile.createDefault(dim);
+        return ClimateProfileRegistry.get(dim);
     }
 
     public static ClimateProfile getProfile(StormObject so) {
-        if (so == null || so.manager == null) return ClimateProfile.createDefault(0);
+        if (so == null || so.manager == null) return ClimateProfileRegistry.get(0);
         return getProfile(so.manager.dim);
     }
 
@@ -383,8 +226,7 @@ public class ClimateEngine {
 
     public static boolean isDimensionGrabAllowed(int dim) {
         ensureProfilesLoaded();
-        ClimateProfile p = getProfile(dim);
-        return p.grabBlocks;
+        return ClimateProfileRegistry.isGrabAllowed(dim);
     }
 
     public static boolean shouldSpawnFunnel(StormObject so) {

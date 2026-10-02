@@ -1,6 +1,7 @@
 package weather2.util;
 
 import weather2.climate.ClimateEngine;
+import weather2.climate.ClimateProfile;
 import weather2.compat.WeatherNTNHHooks;
 import weather2.deflector.DeflectorPowerEngine;
 import weather2.protection.BlockProtectionPipeline;
@@ -26,9 +27,9 @@ public class WeatherEveHelper extends WeatherNTNHHooks {
     public static final long DEFLECTOR_MAX_POWER = DeflectorPowerEngine.DEFLECTOR_MAX_POWER;
 
     /**
-     * Backward-compatible alias for ClimateEngine.ClimateProfile.
+     * Backward-compatible alias for ClimateProfile.
      */
-    public static class WeatherDimensionProfile extends ClimateEngine.ClimateProfile {
+    public static class WeatherDimensionProfile extends ClimateProfile {
 
         public WeatherDimensionProfile(int dim, String name, boolean weatherEnabled, int maxStage,
             boolean alwaysProgresses, int deadlyCooldown, float lightningMultiplier, int landSpawnOdds,
@@ -46,7 +47,7 @@ public class WeatherEveHelper extends WeatherNTNHHooks {
                 grabBlocks);
         }
 
-        public static WeatherDimensionProfile fromClimateProfile(ClimateEngine.ClimateProfile p) {
+        public static WeatherDimensionProfile fromClimateProfile(ClimateProfile p) {
             if (p == null) return null;
             return new WeatherDimensionProfile(
                 p.dim,
@@ -63,12 +64,12 @@ public class WeatherEveHelper extends WeatherNTNHHooks {
     }
 
     public static WeatherDimensionProfile getProfile(int dim) {
-        ClimateEngine.ClimateProfile p = ClimateEngine.getProfile(dim);
+        ClimateProfile p = ClimateEngine.getProfile(dim);
         return WeatherDimensionProfile.fromClimateProfile(p);
     }
 
     public static WeatherDimensionProfile getProfile(StormObject so) {
-        ClimateEngine.ClimateProfile p = ClimateEngine.getProfile(so);
+        ClimateProfile p = ClimateEngine.getProfile(so);
         return WeatherDimensionProfile.fromClimateProfile(p);
     }
 }
