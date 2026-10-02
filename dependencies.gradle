@@ -1,4 +1,9 @@
 dependencies {
     compileOnly(rfg.deobf(project.files("libs/coroutil-1.7.10-1.1.6.jar")))
     compileOnly(project.files("libs/hbm-api.jar"))
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation(rfg.deobf(project.files("libs/coroutil-1.7.10-1.1.6.jar")))
+    testImplementation(project.files("libs/hbm-api.jar"))
 }
+

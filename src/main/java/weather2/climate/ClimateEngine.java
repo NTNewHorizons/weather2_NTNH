@@ -19,7 +19,7 @@ public class ClimateEngine {
     public static final int DIM_LAYTHE = 22;
     public static final int DIM_TEKTO = 24;
 
-    public static final String DEFAULT_WEATHER_PROFILES = "0, 3, false, 0, 1.0, 0, 0, false; "
+    public static final String DEFAULT_WEATHER_PROFILES = "0, 5, false, 3600, 1.0, 25, 0, true; "
         + "duna, 9, false, 1800, 1.0, 10, 0, true; "
         + "eve, 9, true, 800, 6.0, 3, 7, true; "
         + "laythe, 9, false, 1800, 1.0, 10, 20, true; "

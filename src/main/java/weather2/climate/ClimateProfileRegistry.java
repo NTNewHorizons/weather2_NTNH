@@ -38,17 +38,17 @@ public class ClimateProfileRegistry {
      * Registers canonical built-in defaults for known NTNH dimensions.
      */
     public static synchronized void registerDefaults() {
-        // Overworld (Earth, Dim 0): Gentle weather (Hail max, no tornadoes, no block destruction)
+        // Overworld (Earth, Dim 0): Localized early threat (F1 max, selective fragile grab only)
         register(
             ClimateProfile.builder("overworld")
                 .dim(ClimateEngine.DIM_OVERWORLD)
                 .weatherEnabled(true)
-                .exactStage(3) // STATE_HAIL (soft weather only)
+                .exactStage(5) // F1 max (STATE_STAGE1)
                 .alwaysProgresses(false)
-                .deadlyCooldown(0)
+                .deadlyCooldown(3600)
                 .lightningMultiplier(1.0F)
-                .spawnOdds(0, 0)
-                .grabBlocks(false)
+                .spawnOdds(25, 0)
+                .grabBlocks(true)
                 .build());
 
         // Duna (Mars-analog, Dim 16): Polar CO2 blizzards & equatorial dust devils
@@ -302,7 +302,7 @@ public class ClimateProfileRegistry {
 
             // Special-case Overworld stage 0 in config
             if (maxStage == 0 && (dim == 0 || dimToken.equalsIgnoreCase("overworld") || dimToken.equals("0"))) {
-                b.exactStage(3);
+                b.exactStage(5);
             }
 
             register(b.build());

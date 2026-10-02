@@ -80,6 +80,7 @@ public class DeflectorPowerEngine {
             switch (state) {
                 case OFFLINE:
                     if (power >= DEFLECTOR_IDLE_DRAIN) {
+                        te.setPower(power - DEFLECTOR_IDLE_DRAIN);
                         te.transitionTo(DeflectorState.ACTIVE, 0);
                         return true;
                     }
@@ -212,6 +213,10 @@ public class DeflectorPowerEngine {
 
         if (deflectorObj instanceof IDeflectorTE) {
             IDeflectorTE te = (IDeflectorTE) deflectorObj;
+            if (!te.getState()
+                .isFieldActive()) {
+                return false;
+            }
             long currentPower = te.getPower();
 
             if (cost < 0) {
@@ -262,6 +267,7 @@ public class DeflectorPowerEngine {
                 return false;
             } else {
                 // Case 3: Insufficient HE power in buffer — POWER FAILURE BLACKOUT!
+                te.setPower(0L);
                 te.transitionTo(DeflectorState.BLACKOUT_DEPLETED, COOLDOWN_BLACKOUT);
                 playSound(
                     te.getDeflectorWorld(),

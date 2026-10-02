@@ -1,11 +1,19 @@
 package weather2.protection.policy;
 
 import net.minecraft.block.Block;
+import net.minecraft.block.BlockBush;
+import net.minecraft.block.BlockFence;
+import net.minecraft.block.BlockFenceGate;
+import net.minecraft.block.BlockLeaves;
+import net.minecraft.block.BlockPane;
 import net.minecraft.block.BlockTallGrass;
+import net.minecraft.block.BlockTorch;
 import net.minecraft.block.material.Material;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
+import net.minecraftforge.common.IPlantable;
 
+import weather2.climate.ClimateEngine;
 import weather2.config.ConfigMisc;
 import weather2.protection.BlockContext;
 import weather2.protection.BlockGrabPolicy;
@@ -15,6 +23,13 @@ import weather2.util.WeatherUtil;
 /**
  * NTNH Deep Module: Hardness & Material Threshold Grab Policy.
  * Evaluates structural hardness and material vulnerability against storm forces.
+ *
+ * Overworld (Dim 0) Early-Game Selective Gate:
+ * Only fragile decorative/agricultural blocks (crops, leaves, torches, tall grass, flowers, cloth,
+ * glass panes, fences) can be ripped. Solid building blocks (wood planks, stone, brick, ores, logs, terrain)
+ * are 100% immune.
+ *
+ * Planetary (Dim != 0) Strength Mode:
  * Lightweight materials (wood, cloth, plants, glass, hardness <= 0.74F) are permitted to be grabbed.
  * Heavy building materials (stone, iron, concrete, steel, hardness > 0.74F) are denied.
  */
@@ -30,6 +45,20 @@ public class HardnessThresholdPolicy implements BlockGrabPolicy {
             }
         } catch (Throwable ignored) {}
         return null;
+    }
+
+    public static boolean isOverworldFragile(Block block) {
+        if (block == null) return false;
+        if (block instanceof BlockBush || block instanceof IPlantable
+            || block instanceof BlockLeaves
+            || block instanceof BlockTorch
+            || block instanceof BlockPane
+            || block instanceof BlockFence
+            || block instanceof BlockFenceGate) {
+            return true;
+        }
+        Material mat = block.getMaterial();
+        return mat == Material.plants || mat == Material.vine || mat == Material.leaves || mat == Material.cloth;
     }
 
     @Override
@@ -54,7 +83,17 @@ public class HardnessThresholdPolicy implements BlockGrabPolicy {
             }
         }
 
-        // 2. Strength & Material Grabbing mode
+        // 2. Overworld Selective Fragile Grabbing Gate
+        int dim = ctx.getDimensionId();
+        if (dim == ClimateEngine.DIM_OVERWORLD) {
+            if (isOverworldFragile(block)) {
+                return GrabDecision.ALLOW;
+            } else {
+                return GrabDecision.DENY;
+            }
+        }
+
+        // 3. Strength & Material Grabbing mode
         if (ConfigMisc.Storm_Tornado_GrabCond_StrengthGrabbing) {
             Material mat = block.getMaterial();
             if (mat == Material.wood || mat == Material.cloth
