@@ -12,10 +12,16 @@ import net.minecraft.world.World;
 
 public class BlockAnemometer extends BlockContainer {
 
-    public BlockAnemometer(int var1) {
+    // NTNH start: [FIX] (registry): Add no-arg constructor for Forge 1.7.10 GameRegistry auto-ID assignment
+    public BlockAnemometer() {
         super(Material.circuits);
         this.setBlockBounds(0.4F, 0.0F, 0.4F, 0.6F, 0.3F, 0.6F);
     }
+
+    public BlockAnemometer(int var1) {
+        this();
+    }
+    // NTNH end
 
     public IIcon getIcon(int par1, int par2) {
         return Blocks.stone.getIcon(par1, par2);

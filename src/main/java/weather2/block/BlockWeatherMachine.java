@@ -13,9 +13,15 @@ import CoroUtil.util.CoroUtil;
 
 public class BlockWeatherMachine extends BlockContainer {
 
-    public BlockWeatherMachine(int var1) {
+    // NTNH start: [FIX] (registry): Add no-arg constructor for Forge 1.7.10 GameRegistry auto-ID assignment
+    public BlockWeatherMachine() {
         super(Material.clay);
     }
+
+    public BlockWeatherMachine(int var1) {
+        this();
+    }
+    // NTNH end
 
     public int tickRate() {
         return 90;

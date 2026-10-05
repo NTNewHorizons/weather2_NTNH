@@ -16,10 +16,16 @@ import weather2.weathersystem.storm.StormObject;
 
 public class BlockTSensor extends Block {
 
-    public BlockTSensor(int var1) {
+    // NTNH start: [FIX] (registry): Add no-arg constructor for Forge 1.7.10 GameRegistry auto-ID assignment
+    public BlockTSensor() {
         super(Material.clay);
         this.setTickRandomly(true);
     }
+
+    public BlockTSensor(int var1) {
+        this();
+    }
+    // NTNH end
 
     public boolean renderAsNormalBlock() {
         return false;

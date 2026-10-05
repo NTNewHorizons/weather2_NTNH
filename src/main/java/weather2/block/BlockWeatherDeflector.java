@@ -9,9 +9,15 @@ import net.minecraft.world.World;
 
 public class BlockWeatherDeflector extends BlockContainer {
 
-    public BlockWeatherDeflector(int var1) {
+    // NTNH start: [FIX] (registry): Add no-arg constructor for Forge 1.7.10 GameRegistry auto-ID assignment
+    public BlockWeatherDeflector() {
         super(Material.clay);
     }
+
+    public BlockWeatherDeflector(int var1) {
+        this();
+    }
+    // NTNH end
 
     public int tickRate() {
         return 90;

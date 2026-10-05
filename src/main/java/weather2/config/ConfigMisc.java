@@ -133,13 +133,8 @@ public class ConfigMisc implements IConfigCategory {
     public static double volWindTreesScale = 0.5D;
     public static double sirenActivateDistance = 256.0D;
     public static double sensorActivateDistance = 256.0D;
-    public static int Block_sensorID = 1900;
-    public static int Block_sirenID = 1901;
-    public static int Block_windVaneID = 1902;
-    public static int Block_weatherForecastID = 1903;
-    public static int Block_weatherMachineID = 1904;
-    public static int Block_weatherDeflectorID = 1905;
-    public static int Block_anemometer = 1906;
+    // NTNH: [FIX] (registry): Removed legacy 1.6.4 Block_*ID fields; Forge 1.7.10 auto-assigns block IDs via
+    // GameRegistry
     public static boolean Block_WeatherMachineNoTornadosOrCyclones = false;
     public static String Dimension_List_Weather = "0,-127";
     public static String Dimension_List_Clouds = "0,-127";

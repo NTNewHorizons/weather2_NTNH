@@ -9,9 +9,15 @@ import net.minecraft.world.World;
 
 public class BlockTSiren extends BlockContainer {
 
-    public BlockTSiren(int var1) {
+    // NTNH start: [FIX] (registry): Add no-arg constructor for Forge 1.7.10 GameRegistry auto-ID assignment
+    public BlockTSiren() {
         super(Material.clay);
     }
+
+    public BlockTSiren(int var1) {
+        this();
+    }
+    // NTNH end
 
     public int tickRate() {
         return 90;
