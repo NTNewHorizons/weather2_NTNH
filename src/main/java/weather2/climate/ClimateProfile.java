@@ -137,6 +137,30 @@ public class ClimateProfile {
             return this;
         }
 
+        /**
+         * Parses a stage token from configuration:
+         * - Symbolic Fujita/Cyclone tokens ("F0".."F5", "C0".."C5") map to engine stages 4..9.
+         * - Plain numeric literals ("0".."9") are treated as exact engine stages 0..9.
+         */
+        public Builder parseStage(String token) {
+            if (token == null) {
+                this.maxStage = 0;
+                return this;
+            }
+            String s = token.trim()
+                .toUpperCase();
+            if ((s.startsWith("F") || s.startsWith("C")) && s.length() == 2 && Character.isDigit(s.charAt(1))) {
+                int fujita = s.charAt(1) - '0';
+                return exactStage(Math.min(5, Math.max(0, fujita)) + 4);
+            }
+            try {
+                return exactStage(Integer.parseInt(s));
+            } catch (NumberFormatException e) {
+                this.maxStage = 0;
+                return this;
+            }
+        }
+
         public Builder alwaysProgresses(boolean always) {
             this.alwaysProgresses = always;
             return this;

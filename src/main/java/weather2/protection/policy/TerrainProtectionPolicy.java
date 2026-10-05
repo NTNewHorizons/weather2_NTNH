@@ -56,8 +56,7 @@ public class TerrainProtectionPolicy implements BlockGrabPolicy {
                     // Must be exposed to air on top (surface-only erosion, never underground drilling)
                     boolean isSurface = (ctx.world == null || ctx.world.isAirBlock(ctx.x, ctx.y + 1, ctx.z));
                     if (isSurface) {
-                        int spatialHash = Math.abs(ctx.x * 31 + ctx.z * 17 + ctx.y);
-                        if (spatialHash % EROSION_MODULO == 0) {
+                        if (computeSpatialHash(ctx.x, ctx.y, ctx.z) % EROSION_MODULO == 0) {
                             return GrabDecision.PASS;
                         }
                     }
@@ -69,6 +68,17 @@ public class TerrainProtectionPolicy implements BlockGrabPolicy {
         }
 
         return GrabDecision.PASS;
+    }
+
+    /**
+     * Computes a non-negative avalanche bit-mixed spatial hash from 3D block coordinates,
+     * avoiding linear congruence stripe artifacts under modulo 6.
+     */
+    public static int computeSpatialHash(int x, int y, int z) {
+        int h = x * 0x45d9f3b ^ z * 0x119de1f3 ^ y * 0x27d4eb2d;
+        h = ((h >>> 16) ^ h) * 0x45d9f3b;
+        h = (h >>> 16) ^ h;
+        return h & 0x7FFFFFFF;
     }
 
     public static boolean isSoilBlock(Block block) {

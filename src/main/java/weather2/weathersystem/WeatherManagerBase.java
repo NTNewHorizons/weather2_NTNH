@@ -32,6 +32,7 @@ public class WeatherManagerBase {
     public HashMap lookupVolcanoes = new HashMap();
     public WindManager windMan = new WindManager(this);
     public boolean isVanillaRainActiveOnServer = false;
+    public boolean isVanillaThunderActiveOnServer = false;
     public long lastStormFormed = 0L;
 
     public WeatherManagerBase(int parDim) {

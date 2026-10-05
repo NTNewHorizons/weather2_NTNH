@@ -38,7 +38,7 @@ public class ClimateProfileRegistry {
      * Registers canonical built-in defaults for known NTNH dimensions.
      */
     public static synchronized void registerDefaults() {
-        // Overworld (Earth, Dim 0): Localized early threat (F1 max, selective fragile grab only)
+        // Overworld (Earth, Dim 0): Localized early threat (F1 max, selective fragile grab only, calm 0.25x lightning)
         register(
             ClimateProfile.builder("overworld")
                 .dim(ClimateEngine.DIM_OVERWORLD)
@@ -46,7 +46,7 @@ public class ClimateProfileRegistry {
                 .exactStage(5) // F1 max (STATE_STAGE1)
                 .alwaysProgresses(false)
                 .deadlyCooldown(3600)
-                .lightningMultiplier(1.0F)
+                .lightningMultiplier(0.25F)
                 .spawnOdds(25, 0)
                 .grabBlocks(true)
                 .build());
@@ -241,9 +241,10 @@ public class ClimateProfileRegistry {
             }
             if (dim == -999) continue;
 
-            int maxStage = 0;
+            String stageToken = parts[1].trim();
+            int rawStage = 0;
             try {
-                maxStage = Integer.parseInt(parts[1].trim());
+                rawStage = Integer.parseInt(stageToken);
             } catch (Throwable ignored) {}
 
             boolean alwaysProgresses = false;
@@ -285,7 +286,7 @@ public class ClimateProfileRegistry {
                 try {
                     grabBlocks = Boolean.parseBoolean(parts[5].trim());
                 } catch (Throwable ignored) {}
-                alwaysProgresses = (maxStage >= 9 && deadlyCooldown <= 1000);
+                alwaysProgresses = (rawStage >= 9 && deadlyCooldown <= 1000);
                 if (dimToken.equalsIgnoreCase("laythe") || dimToken.equalsIgnoreCase("eve")) {
                     oceanSpawnOdds = landSpawnOdds * 2;
                 }
@@ -293,15 +294,16 @@ public class ClimateProfileRegistry {
 
             ClimateProfile.Builder b = ClimateProfile.builder(dim, dimToken)
                 .weatherEnabled(true)
-                .maxStage(maxStage)
+                .parseStage(stageToken)
                 .alwaysProgresses(alwaysProgresses)
                 .deadlyCooldown(deadlyCooldown)
                 .lightningMultiplier(lightningMul)
                 .spawnOdds(landSpawnOdds, oceanSpawnOdds)
                 .grabBlocks(grabBlocks);
 
-            // Special-case Overworld stage 0 in config
-            if (maxStage == 0 && (dim == 0 || dimToken.equalsIgnoreCase("overworld") || dimToken.equals("0"))) {
+            // Special-case legacy Overworld stage 0 in config -> migrate to localized F1 (stage 5)
+            if ("0".equals(stageToken)
+                && (dim == 0 || dimToken.equalsIgnoreCase("overworld") || dimToken.equals("0"))) {
                 b.exactStage(5);
             }
 

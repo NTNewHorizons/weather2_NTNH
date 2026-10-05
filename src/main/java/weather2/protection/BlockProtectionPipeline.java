@@ -125,6 +125,57 @@ public class BlockProtectionPipeline {
     }
 
     /**
+     * Reconciles both the dimension-wide moving blocks budget and per-storm blockCount
+     * against actual live EntityMovingBlock instances in World.loadedEntityList.
+     * Eliminates counter drift caused by silent chunk unloads (where setDead() is not called).
+     */
+    public static void reconcileMovingBlocks(World world, List storms) {
+        if (world == null || world.provider == null) {
+            return;
+        }
+        int dim = world.provider.dimensionId;
+        if (world.loadedEntityList == null) {
+            reconcileMovingBlocks(dim, storms);
+            return;
+        }
+
+        // Reset per-storm counters before recounting live entities
+        if (storms != null) {
+            for (int i = 0; i < storms.size(); i++) {
+                Object obj = storms.get(i);
+                if (obj instanceof StormObject) {
+                    StormObject s = (StormObject) obj;
+                    if (s.tornadoHelper != null) {
+                        s.tornadoHelper.blockCount = 0;
+                    }
+                }
+            }
+        }
+
+        int liveCount = 0;
+        List entities = world.loadedEntityList;
+        for (int i = 0; i < entities.size(); i++) {
+            Object ent = entities.get(i);
+            if (ent instanceof weather2.entity.EntityMovingBlock) {
+                weather2.entity.EntityMovingBlock mBlock = (weather2.entity.EntityMovingBlock) ent;
+                if (!mBlock.isDead) {
+                    liveCount++;
+                    if (mBlock.owner != null && mBlock.owner.tornadoHelper != null) {
+                        mBlock.owner.tornadoHelper.blockCount++;
+                    }
+                }
+            }
+        }
+
+        java.util.concurrent.atomic.AtomicInteger counter = movingBlocksPerDim.get(dim);
+        if (counter == null) {
+            movingBlocksPerDim.put(dim, new java.util.concurrent.atomic.AtomicInteger(liveCount));
+        } else {
+            counter.set(liveCount);
+        }
+    }
+
+    /**
      * Determines whether a storm is permitted to grab and rip blocks in its current dimension.
      * O(1) performance check: dimension whitelist + moving blocks atomic budget.
      */
@@ -179,7 +230,11 @@ public class BlockProtectionPipeline {
 
     public static boolean canGrab(World world, int x, int y, int z, Block block, StormObject storm) {
         BlockContext ctx = BlockContext.getPooled(world, x, y, z, block, storm);
-        return DEFAULT_POLICY.canGrab(ctx);
+        try {
+            return DEFAULT_POLICY.canGrab(ctx);
+        } finally {
+            ctx.clearReferences();
+        }
     }
 
     public static boolean canGrab(World world, Block block) {
@@ -189,13 +244,19 @@ public class BlockProtectionPipeline {
     /**
      * Replaces WeatherUtil.safetyCheck() with a feature-based ontology check.
      * Returns true if the block is PROTECTED (IMMUNE) and MUST NOT be ripped by tornadoes.
+     * Enforces strict Deny-by-Default (fail-closed) when evaluated without spatial context.
      */
     public static boolean isBlockProtected(Object blockObj) {
         if (blockObj == null) return true;
         BlockContext ctx = BlockContext.of(blockObj);
-        GrabDecision decision = STATIC_PROTECTION_POLICY.evaluate(ctx);
-        if (decision == GrabDecision.DENY) return true;
-        if (decision == GrabDecision.ALLOW) return false;
-        return false;
+        try {
+            GrabDecision decision = STATIC_PROTECTION_POLICY.evaluate(ctx);
+            if (decision == GrabDecision.DENY) return true;
+            if (decision == GrabDecision.ALLOW) return false;
+            // Fallback to HardnessThresholdPolicy for vanilla non-container blocks; fail-closed on anything else
+            return new HardnessThresholdPolicy().evaluate(ctx) != GrabDecision.ALLOW;
+        } finally {
+            ctx.clearReferences();
+        }
     }
 }

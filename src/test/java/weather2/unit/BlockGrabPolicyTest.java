@@ -172,18 +172,26 @@ public class BlockGrabPolicyTest {
         assertEquals("Planetary low-tier storm must not erode soil", GrabDecision.DENY, policy.evaluate(ctxEveF2));
 
         // 5. Planetary soil in catastrophic storm (F5, stage 9):
-        // Find coordinates matching spatial hash modulo 0: (x * 31 + z * 17 + y) % 6 == 0
+        // Find coordinates matching bit-mixed spatial hash modulo 0 and != 0
         StormObject eveF5 = weather2.harness.MockStormFactory.create(9, 2002L);
         eveF5.manager.dim = 18;
-        // x=0, z=0, y=60: (0 + 0 + 60) % 6 == 0
-        BlockContext ctxErosionPass = BlockContext.getPooled(null, 0, 60, 0, net.minecraft.init.Blocks.dirt, eveF5);
+        int xPass = 0;
+        while (TerrainProtectionPolicy.computeSpatialHash(xPass, 60, 0) % TerrainProtectionPolicy.EROSION_MODULO != 0) {
+            xPass++;
+        }
+        int xDeny = 0;
+        while (TerrainProtectionPolicy.computeSpatialHash(xDeny, 60, 0) % TerrainProtectionPolicy.EROSION_MODULO == 0) {
+            xDeny++;
+        }
+
+        BlockContext ctxErosionPass = BlockContext.getPooled(null, xPass, 60, 0, net.minecraft.init.Blocks.dirt, eveF5);
         assertEquals(
             "Surface soil exposed to F5 with hash % 6 == 0 must PASS to hardness policy",
             GrabDecision.PASS,
             policy.evaluate(ctxErosionPass));
 
-        // x=0, z=0, y=61: (0 + 0 + 61) % 6 == 1 != 0
-        BlockContext ctxErosionDenied = BlockContext.getPooled(null, 0, 61, 0, net.minecraft.init.Blocks.dirt, eveF5);
+        BlockContext ctxErosionDenied = BlockContext
+            .getPooled(null, xDeny, 60, 0, net.minecraft.init.Blocks.dirt, eveF5);
         assertEquals(
             "Surface soil with hash % 6 != 0 must be DENIED (throttled)",
             GrabDecision.DENY,
@@ -198,22 +206,25 @@ public class BlockGrabPolicyTest {
         BlockContext ctxNull = BlockContext.getPooled(null, 0, 0, 0, null, null);
         assertEquals(GrabDecision.DENY, policy.evaluate(ctxNull));
 
-        // 2. Overworld solid building block (planks, stone) -> DENY
+        // 2. Overworld solid building blocks (planks, stone, fence) -> DENY
         BlockContext ctxPlanks = BlockContext.getPooled(null, 0, 64, 0, net.minecraft.init.Blocks.planks, null);
         assertEquals(
             "Overworld wood planks must be DENIED (solid immunity)",
             GrabDecision.DENY,
             policy.evaluate(ctxPlanks));
 
-        // 3. Overworld fragile blocks (torch, leaves, fence) -> ALLOW
+        BlockContext ctxFence = BlockContext.getPooled(null, 0, 64, 0, net.minecraft.init.Blocks.fence, null);
+        assertEquals(
+            "Overworld fences must be DENIED (structural immunity)",
+            GrabDecision.DENY,
+            policy.evaluate(ctxFence));
+
+        // 3. Overworld fragile blocks (torch, leaves) -> ALLOW
         BlockContext ctxTorch = BlockContext.getPooled(null, 0, 64, 0, net.minecraft.init.Blocks.torch, null);
         assertEquals("Overworld torch must be ALLOWED", GrabDecision.ALLOW, policy.evaluate(ctxTorch));
 
         BlockContext ctxLeaves = BlockContext.getPooled(null, 0, 64, 0, net.minecraft.init.Blocks.leaves, null);
         assertEquals("Overworld leaves must be ALLOWED", GrabDecision.ALLOW, policy.evaluate(ctxLeaves));
-
-        BlockContext ctxFence = BlockContext.getPooled(null, 0, 64, 0, net.minecraft.init.Blocks.fence, null);
-        assertEquals("Overworld fence must be ALLOWED", GrabDecision.ALLOW, policy.evaluate(ctxFence));
 
         // 4. Planetary wood planks (Eve dim 18) -> ALLOW
         StormObject eveStorm = weather2.harness.MockStormFactory.create(8, 3001L);
@@ -244,5 +255,14 @@ public class BlockGrabPolicyTest {
                 .size());
 
         assertTrue("Null block must be protected", BlockProtectionPipeline.isBlockProtected(null));
+        assertTrue(
+            "Stone must be protected (fail-closed Deny-by-Default)",
+            BlockProtectionPipeline.isBlockProtected(net.minecraft.init.Blocks.stone));
+        assertTrue(
+            "Planks must be protected in static Overworld context",
+            BlockProtectionPipeline.isBlockProtected(net.minecraft.init.Blocks.planks));
+        assertFalse(
+            "Fragile leaves are not protected in static context",
+            BlockProtectionPipeline.isBlockProtected(net.minecraft.init.Blocks.leaves));
     }
 }

@@ -50,15 +50,29 @@ public class DeflectorEscalationTest {
 
     @Test
     public void testIdlePowerDrain() {
-        deflector.power = 100000L;
+        // Trickle power below hysteresis threshold (50k < 100k) must NOT activate OFFLINE deflector (anti-chatter)
+        deflector.power = 50000L;
         boolean powered = WeatherEveHelper.tickDeflectorPower(deflector);
-        assertTrue("tickDeflectorPower should be true with power", powered);
+        assertFalse("Below 100k activation hysteresis, OFFLINE deflector must remain OFFLINE", powered);
+        assertFalse("Field must remain inactive below hysteresis threshold", deflector.isFieldActive);
+        assertEquals("Power must not be drained while OFFLINE", 50000L, deflector.power);
+
+        // Once buffer reaches 100k HE threshold, deflector activates and drains 25k/t down to 25k HE
+        deflector.power = 100000L;
+        powered = WeatherEveHelper.tickDeflectorPower(deflector);
+        assertTrue("tickDeflectorPower should be true at 100k threshold", powered);
         assertTrue("Field should be active", deflector.isFieldActive);
         assertEquals("Power should be 100k - 25k = 75k", 75000L, deflector.power);
 
+        // While ACTIVE, 50k HE is sufficient to stay ACTIVE (hysteresis holds until < 25k)
+        deflector.power = 50000L;
+        powered = WeatherEveHelper.tickDeflectorPower(deflector);
+        assertTrue("ACTIVE deflector stays on at 50k HE", powered);
+        assertEquals(25000L, deflector.power);
+
         deflector.power = 10000L;
         powered = WeatherEveHelper.tickDeflectorPower(deflector);
-        assertFalse("tickDeflectorPower should be false with insufficient power", powered);
+        assertFalse("tickDeflectorPower should be false with insufficient power (< 25k)", powered);
         assertFalse("Field should be inactive", deflector.isFieldActive);
     }
 

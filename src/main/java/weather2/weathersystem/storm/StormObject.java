@@ -423,8 +423,9 @@ public class StormObject {
             .max(1, ConfigMisc.Storm_LightningStrikeBaseValueOddsTo1 - this.levelCurIntensityStage * 10);
         int lightningOdds = weather2.compat.WeatherNTNHHooks.getAdjustedLightningOdds(baseLightningOdds, this);
         if (this.levelCurIntensityStage >= STATE_THUNDER && rand.nextInt(lightningOdds) == 0) {
-            i = (int) (this.pos.xCoord + (double) rand.nextInt(this.size) - (double) rand.nextInt(this.size));
-            x = (int) (this.pos.zCoord + (double) rand.nextInt(this.size) - (double) rand.nextInt(this.size));
+            int strikeRadius = Math.max(1, Math.min(this.size, 112));
+            i = (int) (this.pos.xCoord + (double) rand.nextInt(strikeRadius) - (double) rand.nextInt(strikeRadius));
+            x = (int) (this.pos.zCoord + (double) rand.nextInt(strikeRadius) - (double) rand.nextInt(strikeRadius));
             z = world.getPrecipitationHeight(i, x);
             if (world.checkChunksExist(i, z, x, i, z, x)) {
                 this.addWeatherEffectLightning(new EntityLightningBolt(world, (double) i, (double) z, (double) x));

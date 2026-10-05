@@ -19,6 +19,7 @@ import weather2.weathersystem.storm.StormObject;
 public class DeflectorPowerEngine {
 
     public static final long DEFLECTOR_IDLE_DRAIN = 25000L;
+    public static final long DEFLECTOR_ACTIVATION_THRESHOLD = 100000L; // 4x idle drain hysteresis to prevent chatter
     public static final long DEFLECTOR_MAX_POWER = 100000000L;
 
     public static final int COOLDOWN_BLACKOUT = 200;
@@ -67,6 +68,8 @@ public class DeflectorPowerEngine {
     /**
      * Ticks deflector power and executes State Machine transitions.
      * Called every tick on logical server.
+     * Uses hysteresis: OFFLINE -> ACTIVE requires DEFLECTOR_ACTIVATION_THRESHOLD (100k HE),
+     * while ACTIVE stays on down to DEFLECTOR_IDLE_DRAIN (25k HE).
      */
     public static boolean tickDeflectorPower(Object deflectorObj) {
         if (deflectorObj == null) return false;
@@ -79,7 +82,7 @@ public class DeflectorPowerEngine {
 
             switch (state) {
                 case OFFLINE:
-                    if (power >= DEFLECTOR_IDLE_DRAIN) {
+                    if (power >= DEFLECTOR_ACTIVATION_THRESHOLD) {
                         te.setPower(power - DEFLECTOR_IDLE_DRAIN);
                         te.transitionTo(DeflectorState.ACTIVE, 0);
                         return true;
@@ -118,7 +121,7 @@ public class DeflectorPowerEngine {
                         te.setStateTimer(timer - 1);
                     }
                     if (te.getStateTimer() <= 0) {
-                        if (power >= DEFLECTOR_IDLE_DRAIN) {
+                        if (power >= DEFLECTOR_ACTIVATION_THRESHOLD) {
                             te.transitionTo(DeflectorState.ACTIVE, 0);
                             return true;
                         } else {

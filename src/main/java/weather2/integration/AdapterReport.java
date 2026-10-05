@@ -51,6 +51,16 @@ public class AdapterReport {
             "Adapter disabled via circuit breaker");
     }
 
+    public static AdapterReport clientOnly(String adapterName, String targetModId) {
+        return new AdapterReport(
+            adapterName,
+            targetModId,
+            AdapterStatus.CLIENT_ONLY,
+            "Client-side adapter bypassed on Dedicated Server",
+            false,
+            null);
+    }
+
     public String getAdapterName() {
         return adapterName;
     }
@@ -79,6 +89,8 @@ public class AdapterReport {
     public String toString() {
         if (status == AdapterStatus.NOT_INSTALLED) {
             return String.format("%-24s [%s] - Not present", adapterName, targetModId);
+        } else if (status == AdapterStatus.CLIENT_ONLY) {
+            return String.format("%-24s [%s] - CLIENT_ONLY: %s", adapterName, targetModId, details);
         } else if (status == AdapterStatus.ACTIVE) {
             return String.format("%-24s [%s] - ACTIVE: %s", adapterName, targetModId, details);
         } else if (status == AdapterStatus.DEGRADED) {

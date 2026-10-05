@@ -53,14 +53,31 @@ public class ClimateRegistryTest {
             .exactStage(4)
             .build();
         assertEquals("exactStage(4) should be 4", 4, pExact.maxStage);
+
+        ClimateProfile pTokenF1 = ClimateProfile.builder("test_token_f1")
+            .dim(103)
+            .parseStage("F1")
+            .build();
+        assertEquals("parseStage('F1') should map to stage 5", 5, pTokenF1.maxStage);
+
+        ClimateProfile pTokenNum = ClimateProfile.builder("test_token_num")
+            .dim(104)
+            .parseStage("5")
+            .build();
+        assertEquals("parseStage('5') should remain exact stage 5 (not shifted to 9)", 5, pTokenNum.maxStage);
     }
 
     @Test
     public void testDefaultProfiles() {
+        weather2.climate.ClimateEngine.ensureProfilesLoaded();
+
         // Overworld (dim 0)
         ClimateProfile overworld = ClimateProfileRegistry.get(0);
         assertNotNull(overworld);
-        assertEquals("Overworld maxStage should be 5 (F1 localized threat)", 5, overworld.maxStage);
+        assertEquals(
+            "Overworld maxStage should be 5 (F1 localized threat) even after config load",
+            5,
+            overworld.maxStage);
         assertTrue("Overworld grabBlocks must be true for selective grab", overworld.grabBlocks);
         assertTrue(
             "Overworld grab should be allowed in registry for selective grab",
@@ -138,5 +155,54 @@ public class ClimateRegistryTest {
         assertTrue("Overridden alwaysProgresses should be true", overriddenAres.alwaysProgresses);
         assertEquals("Overridden cooldown should be 400", 400, overriddenAres.deadlyCooldown);
         assertEquals(8.0F, overriddenAres.lightningMultiplier, 0.001F);
+    }
+
+    @Test
+    public void testVanillaWeatherSyncAndThunderStageRestoration() throws Exception {
+        weather2.weathersystem.WeatherManagerClient wmClient = new weather2.weathersystem.WeatherManagerClient(0);
+        assertFalse(wmClient.isVanillaRainActiveOnServer);
+        assertFalse(wmClient.isVanillaThunderActiveOnServer);
+
+        net.minecraft.nbt.NBTTagCompound pkt = new net.minecraft.nbt.NBTTagCompound();
+        pkt.setString("command", "syncWeatherUpdate");
+        net.minecraft.nbt.NBTTagCompound inner = new net.minecraft.nbt.NBTTagCompound();
+        inner.setBoolean("isVanillaRainActiveOnServer", true);
+        inner.setBoolean("isVanillaThunderActiveOnServer", true);
+        pkt.setTag("data", inner);
+
+        wmClient.nbtSyncFromServer(pkt);
+        assertTrue("Rain flag must sync from data compound", wmClient.isVanillaRainActiveOnServer);
+        assertTrue("Thunder flag must sync from data compound", wmClient.isVanillaThunderActiveOnServer);
+
+        // Verify that a StormObject capped to STATE_THUNDER by vanilla /weather thunder restores maxStage on
+        // initRealStorm
+        weather2.weathersystem.storm.StormObject so = weather2.harness.MockStormFactory.create(1, 1L, 16);
+        so.maxIntensityStage = weather2.weathersystem.storm.StormObject.STATE_THUNDER;
+        weather2.climate.ClimateEngine.onInitRealStorm(so);
+        assertEquals("Duna storm must restore maxStage=9 on initRealStorm", 9, so.maxIntensityStage);
+
+        // Verify per-dimension lightning frequency differentiation (Overworld 0.25x vs Duna 1.0x vs Tekto 2.0x vs Eve
+        // 6.0x)
+        weather2.weathersystem.storm.StormObject overworldStorm = weather2.harness.MockStormFactory.create(1, 1L, 0);
+        weather2.weathersystem.storm.StormObject dunaStorm = weather2.harness.MockStormFactory.create(1, 1L, 16);
+        weather2.weathersystem.storm.StormObject tektoStorm = weather2.harness.MockStormFactory.create(1, 1L, 24);
+        weather2.weathersystem.storm.StormObject eveStorm = weather2.harness.MockStormFactory.create(1, 1L, 18);
+
+        assertEquals(
+            "Overworld lightning odds (0.25x) must be 4x rarer (800)",
+            800,
+            weather2.climate.ClimateEngine.getAdjustedLightningOdds(200, overworldStorm));
+        assertEquals(
+            "Duna lightning odds (1.0x) must be 200",
+            200,
+            weather2.climate.ClimateEngine.getAdjustedLightningOdds(200, dunaStorm));
+        assertEquals(
+            "Tekto lightning odds (2.0x) must be 100",
+            100,
+            weather2.climate.ClimateEngine.getAdjustedLightningOdds(200, tektoStorm));
+        assertEquals(
+            "Eve lightning odds (6.0x) must be 33",
+            33,
+            weather2.climate.ClimateEngine.getAdjustedLightningOdds(200, eveStorm));
     }
 }

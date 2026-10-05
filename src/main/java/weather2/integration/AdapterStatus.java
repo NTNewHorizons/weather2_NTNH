@@ -24,5 +24,10 @@ public enum AdapterStatus {
      * Target mod is installed, but critical interface or binding threw a fatal error.
      * Adapter disabled via circuit breaker to prevent server crash.
      */
-    FAILED
+    FAILED,
+
+    /**
+     * Adapter is client-side only and intentionally bypassed on a Dedicated Server.
+     */
+    CLIENT_ONLY
 }

@@ -55,7 +55,8 @@ public class TornadoSweepSimulationTest {
         BlockContext ctxLog = BlockContext.getPooled(null, 10, 64, 10, net.minecraft.init.Blocks.log, overworldF1);
         assertFalse("Overworld tree logs must be 100% immune", BlockProtectionPipeline.canGrab(ctxLog));
 
-        // 2. Fragile decorative and agricultural blocks (torches, leaves, fences) must be grabbable
+        // 2. Fragile decorative and agricultural blocks (torches, leaves) must be grabbable, while structural fences
+        // are immune
         BlockContext ctxTorch = BlockContext.getPooled(null, 10, 64, 10, net.minecraft.init.Blocks.torch, overworldF1);
         assertTrue(
             "Overworld torches should be grabbable by localized storms",
@@ -68,8 +69,8 @@ public class TornadoSweepSimulationTest {
             BlockProtectionPipeline.canGrab(ctxLeaves));
 
         BlockContext ctxFence = BlockContext.getPooled(null, 10, 64, 10, net.minecraft.init.Blocks.fence, overworldF1);
-        assertTrue(
-            "Overworld fences should be grabbable by localized storms",
+        assertFalse(
+            "Overworld structural fences must be 100% immune to localized storms",
             BlockProtectionPipeline.canGrab(ctxFence));
     }
 

@@ -19,7 +19,7 @@ public class ClimateEngine {
     public static final int DIM_LAYTHE = 22;
     public static final int DIM_TEKTO = 24;
 
-    public static final String DEFAULT_WEATHER_PROFILES = "0, 5, false, 3600, 1.0, 25, 0, true; "
+    public static final String DEFAULT_WEATHER_PROFILES = "0, 5, false, 3600, 0.25, 25, 0, true; "
         + "duna, 9, false, 1800, 1.0, 10, 0, true; "
         + "eve, 9, true, 800, 6.0, 3, 7, true; "
         + "laythe, 9, false, 1800, 1.0, 10, 20, true; "
@@ -104,18 +104,21 @@ public class ClimateEngine {
                 so.levelCurIntensityStage = StormObject.STATE_HIGHWIND;
             }
         }
-        if (p.maxStage >= 0 && so.maxIntensityStage > p.maxStage) {
+        if (p.maxStage >= 0) {
             so.maxIntensityStage = p.maxStage;
         }
     }
 
     public static int getAdjustedLightningOdds(int baseOdds, StormObject so) {
         ClimateProfile p = getProfile(so);
-        if (p.lightningMultiplier > 1.0F) {
-            int adjusted = (int) (baseOdds / p.lightningMultiplier);
+        if (p.lightningMultiplier <= 0.0F) {
+            return Integer.MAX_VALUE;
+        }
+        if (p.lightningMultiplier != 1.0F) {
+            int adjusted = Math.round(baseOdds / p.lightningMultiplier);
             return Math.max(15, adjusted);
         }
-        return Math.max(1, baseOdds);
+        return Math.max(15, baseOdds);
     }
 
     public static int getDeadlyTimeBetween(int defaultTicks, StormObject so) {

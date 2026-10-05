@@ -381,7 +381,7 @@ public class EntityMovingBlock extends Entity implements IEntityAdditionalSpawnD
     }
 
     public void setDead() {
-        if (!this.worldObj.isRemote && this.owner != null && this.owner.tornadoHelper != null) {
+        if (!this.isDead && !this.worldObj.isRemote && this.owner != null && this.owner.tornadoHelper != null) {
             --this.owner.tornadoHelper.blockCount;
             if (this.owner.tornadoHelper.blockCount < 0) {
                 this.owner.tornadoHelper.blockCount = 0;

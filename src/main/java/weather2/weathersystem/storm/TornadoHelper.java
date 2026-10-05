@@ -192,6 +192,7 @@ public class TornadoHelper {
                     && this.lastGrabTime < System.currentTimeMillis()
                     && this.tickGrabCount < ConfigMisc.Storm_Tornado_maxBlocksGrabbedPerTick) {
                     this.lastGrabTime = System.currentTimeMillis() - 5L;
+                    boolean didRip = false;
                     if (blockID != Blocks.snow && blockID != Blocks.glass) {
                         if (parWorld.getClosestPlayer(
                             this.storm.posBaseFormationPos.xCoord,
@@ -218,25 +219,31 @@ public class TornadoHelper {
 
                             ++this.tickGrabCount;
                             ++this.ripCount;
-                            if (this.ripCount % 10 == 0) {
-                                ;
-                            }
-
                             mBlock.type = 0;
                             seesLight = true;
+                            didRip = true;
                         }
-                    } else if (blockID == Blocks.glass) {
-                        parWorld
-                            .playSoundEffect((double) tryX, (double) tryY, (double) tryZ, "random.glass", 5.0F, 1.0F);
-                    }
-                }
-
-                if (WeatherUtil.shouldRemoveBlock(blockID)) {
-                    ++this.removeCount;
-                    if (notify) {
-                        parWorld.setBlock(tryX, tryY, tryZ, Blocks.air, 0, 3);
                     } else {
-                        parWorld.setBlock(tryX, tryY, tryZ, Blocks.air, 0, 0);
+                        ++this.tickGrabCount;
+                        didRip = true;
+                        if (blockID == Blocks.glass) {
+                            parWorld.playSoundEffect(
+                                (double) tryX,
+                                (double) tryY,
+                                (double) tryZ,
+                                "random.glass",
+                                5.0F,
+                                1.0F);
+                        }
+                    }
+
+                    if (didRip && WeatherUtil.shouldRemoveBlock(blockID)) {
+                        ++this.removeCount;
+                        if (notify) {
+                            parWorld.setBlock(tryX, tryY, tryZ, Blocks.air, 0, 3);
+                        } else {
+                            parWorld.setBlock(tryX, tryY, tryZ, Blocks.air, 0, 0);
+                        }
                     }
                 }
             }

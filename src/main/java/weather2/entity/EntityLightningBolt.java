@@ -30,12 +30,14 @@ public class EntityLightningBolt extends EntityWeatherEffect {
 
     public EntityLightningBolt(World par1World, double par2, double par4, double par6) {
         super(par1World);
+        this.ignoreFrustumCheck = true;
+        this.renderDistanceWeight = 10.0D;
         this.fireLifeTime = ConfigMisc.Lightning_lifetimeOfFire;
         this.fireChance = ConfigMisc.Lightning_OddsTo1OfFire;
         this.setLocationAndAngles(par2, par4, par6, 0.0F, 0.0F);
         this.lightningState = 2;
         this.boltVertex = this.rand.nextLong();
-        this.boltLivingTime = this.rand.nextInt(3) + 1;
+        this.boltLivingTime = this.rand.nextInt(2) + 1;
         Random rand = new Random();
         if (!par1World.isRemote && (this.fireChance == 0 || rand.nextInt(this.fireChance) == 0)
             && par1World.getGameRules()
@@ -144,7 +146,7 @@ public class EntityLightningBolt extends EntityWeatherEffect {
     public void updateFlashEffect() {
         Minecraft mc = FMLClientHandler.instance()
             .getClient();
-        if (mc.thePlayer != null && mc.thePlayer.getDistanceToEntity(this) < 256.0F) {
+        if (mc.thePlayer != null && mc.thePlayer.getDistanceToEntity(this) < 180.0F) {
             this.worldObj.lastLightningBolt = 2;
         }
 
@@ -155,6 +157,23 @@ public class EntityLightningBolt extends EntityWeatherEffect {
     protected void readEntityFromNBT(NBTTagCompound par1NBTTagCompound) {}
 
     protected void writeEntityToNBT(NBTTagCompound par1NBTTagCompound) {}
+
+    // NTNH start: override 1.7.10 render range checks (replaces dead 1.6.4 isInRangeToRenderVec3D)
+    @Override
+    @SideOnly(Side.CLIENT)
+    public boolean isInRangeToRender3d(double x, double y, double z) {
+        double dx = this.posX - x;
+        double dy = this.posY - y;
+        double dz = this.posZ - z;
+        return this.isInRangeToRenderDist(dx * dx + dy * dy + dz * dz);
+    }
+
+    @Override
+    @SideOnly(Side.CLIENT)
+    public boolean isInRangeToRenderDist(double distanceSq) {
+        return this.lightningState >= 0 && distanceSq < 512.0D * 512.0D;
+    }
+    // NTNH end
 
     @SideOnly(Side.CLIENT)
     public boolean isInRangeToRenderVec3D(Vec3 par1Vec3) {

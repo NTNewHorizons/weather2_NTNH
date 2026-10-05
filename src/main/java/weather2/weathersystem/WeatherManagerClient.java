@@ -105,7 +105,11 @@ public class WeatherManagerClient extends WeatherManagerBase {
                     this.getWorld()
                         .addWeatherEffect(ent);
                 } else if (command.equals("syncWeatherUpdate")) {
-                    this.isVanillaRainActiveOnServer = parNBT.getBoolean("isVanillaRainActiveOnServer");
+                    // NTNH start: sync both rain and thunder server weather state
+                    NBTTagCompound var14 = parNBT.hasKey("data") ? parNBT.getCompoundTag("data") : parNBT;
+                    this.isVanillaRainActiveOnServer = var14.getBoolean("isVanillaRainActiveOnServer");
+                    this.isVanillaThunderActiveOnServer = var14.getBoolean("isVanillaThunderActiveOnServer");
+                    // NTNH end
                 }
             }
         }

@@ -309,16 +309,26 @@ public class SceneEnhancer implements Runnable {
 
         this.lastWorldDetected.weatherEffects.clear();
         WeatherUtilParticle.getFXLayers();
-        // NTNH start: reset DSurround rain sync on world transition
+        // NTNH start: reset DSurround rain sync and static precipitation state on world transition
+        curPrecipStr = 0.0F;
+        curPrecipStrTarget = 0.0F;
+        curOvercastStr = 0.0F;
+        curOvercastStrTarget = 0.0F;
         weather2.compat.WeatherNTNHHooks.onPrecipitationTick(0.0F);
         // NTNH end
     }
 
     public void tickParticlePrecipitation() {
+        // NTNH start: always update precipitation state & Dynamic Surroundings sync even when Particle_RainSnow is
+        // false
+        EntityClientPlayerMP entP = FMLClientHandler.instance()
+            .getClient().thePlayer;
+        if (entP == null || entP.worldObj == null) {
+            return;
+        }
+        float curPrecipVal = getRainStrengthAndControlVisuals(entP);
         if (ConfigMisc.Particle_RainSnow) {
-            EntityClientPlayerMP entP = FMLClientHandler.instance()
-                .getClient().thePlayer;
-            float curPrecipVal = getRainStrengthAndControlVisuals(entP);
+            // NTNH end
             float maxPrecip = 0.5F;
             int precipitationHeight = entP.worldObj
                 .getPrecipitationHeight(MathHelper.floor_double(entP.posX), MathHelper.floor_double(entP.posZ));
@@ -434,8 +444,14 @@ public class SceneEnhancer implements Runnable {
             if (closeEnough) {
                 double stormIntensity = ((double) sizeToUse - stormDist) / (double) sizeToUse;
                 tempAdj = storm.levelTemperature > 0.0F ? 1.0F : -1.0F;
-                if (storm.levelCurIntensityStage == StormObject.STATE_NORMAL && stormIntensity > 0.3D) {
+                if (storm.levelCurIntensityStage == StormObject.STATE_NORMAL && stormIntensity > 0.3D
+                    && !ClientTickHandler.weatherManager.isVanillaRainActiveOnServer) {
                     stormIntensity = 0.3D;
+                }
+                if (ClientTickHandler.weatherManager.isVanillaThunderActiveOnServer && stormIntensity < 0.9D) {
+                    stormIntensity = 0.9D;
+                } else if (ClientTickHandler.weatherManager.isVanillaRainActiveOnServer && stormIntensity < 0.7D) {
+                    stormIntensity = 0.7D;
                 }
 
                 if (ConfigMisc.Storm_NoRainVisual) {
@@ -445,13 +461,28 @@ public class SceneEnhancer implements Runnable {
                 mc.theWorld.getWorldInfo()
                     .setRaining(true);
                 mc.theWorld.getWorldInfo()
-                    .setThundering(true);
+                    .setThundering(
+                        storm.levelCurIntensityStage >= StormObject.STATE_THUNDER
+                            || ClientTickHandler.weatherManager.isVanillaThunderActiveOnServer);
                 if (forOvercast) {
                     curOvercastStrTarget = (float) stormIntensity;
                 } else {
                     curPrecipStrTarget = (float) stormIntensity;
                 }
-            } else if (!ConfigMisc.overcastMode) {
+            } else if (ClientTickHandler.weatherManager.isVanillaRainActiveOnServer) {
+                mc.theWorld.getWorldInfo()
+                    .setRaining(true);
+                mc.theWorld.getWorldInfo()
+                    .setThundering(ClientTickHandler.weatherManager.isVanillaThunderActiveOnServer);
+                float vanillaTarget = ConfigMisc.Storm_NoRainVisual ? 0.0F
+                    : (ClientTickHandler.weatherManager.isVanillaThunderActiveOnServer ? 0.9F
+                        : (ConfigMisc.overcastMode ? overcastModeMinPrecip : 0.7F));
+                if (forOvercast) {
+                    curOvercastStrTarget = vanillaTarget;
+                } else {
+                    curPrecipStrTarget = vanillaTarget;
+                }
+            } else {
                 mc.theWorld.getWorldInfo()
                     .setRaining(false);
                 mc.theWorld.getWorldInfo()
@@ -461,27 +492,13 @@ public class SceneEnhancer implements Runnable {
                 } else {
                     curPrecipStrTarget = 0.0F;
                 }
-            } else if (ClientTickHandler.weatherManager.isVanillaRainActiveOnServer) {
-                mc.theWorld.getWorldInfo()
-                    .setRaining(true);
-                mc.theWorld.getWorldInfo()
-                    .setThundering(true);
-                if (forOvercast) {
-                    curOvercastStrTarget = overcastModeMinPrecip;
-                } else {
-                    curPrecipStrTarget = overcastModeMinPrecip;
-                }
-            } else if (forOvercast) {
-                curOvercastStrTarget = 0.0F;
-            } else {
-                curPrecipStrTarget = 0.0F;
             }
 
             if (forOvercast) {
                 if (curOvercastStr > curOvercastStrTarget) {
-                    curOvercastStr -= 0.001F;
+                    curOvercastStr = Math.max(curOvercastStrTarget, curOvercastStr - 0.005F);
                 } else if (curOvercastStr < curOvercastStrTarget) {
-                    curOvercastStr += 0.001F;
+                    curOvercastStr = Math.min(curOvercastStrTarget, curOvercastStr + 0.005F);
                 }
 
                 if ((double) curOvercastStr < 1.0E-4D && curOvercastStr > -1.0E-4F) {
@@ -491,9 +508,9 @@ public class SceneEnhancer implements Runnable {
                 return curOvercastStr * tempAdj;
             } else {
                 if (curPrecipStr > curPrecipStrTarget) {
-                    curPrecipStr -= 0.001F;
+                    curPrecipStr = Math.max(curPrecipStrTarget, curPrecipStr - 0.01F);
                 } else if (curPrecipStr < curPrecipStrTarget) {
-                    curPrecipStr += 0.001F;
+                    curPrecipStr = Math.min(curPrecipStrTarget, curPrecipStr + 0.01F);
                 }
 
                 if ((double) curPrecipStr < 1.0E-4D && curPrecipStr > -1.0E-4F) {

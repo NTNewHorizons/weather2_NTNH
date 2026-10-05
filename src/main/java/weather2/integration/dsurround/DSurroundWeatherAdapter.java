@@ -42,6 +42,15 @@ public class DSurroundWeatherAdapter implements DiagnosableAdapter {
             return AdapterReport.notInstalled(getAdapterName(), getTargetModId());
         }
 
+        try {
+            cpw.mods.fml.common.FMLCommonHandler fml = cpw.mods.fml.common.FMLCommonHandler.instance();
+            if (fml != null && fml.getSide() != null
+                && fml.getSide()
+                    .isServer()) {
+                return AdapterReport.clientOnly(getAdapterName(), getTargetModId());
+            }
+        } catch (Throwable ignored) {}
+
         initReflection();
         if (dsurroundSetIntensity != null) {
             return AdapterReport.active(

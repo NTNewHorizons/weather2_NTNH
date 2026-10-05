@@ -2,10 +2,7 @@ package weather2.protection.policy;
 
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockBush;
-import net.minecraft.block.BlockFence;
-import net.minecraft.block.BlockFenceGate;
 import net.minecraft.block.BlockLeaves;
-import net.minecraft.block.BlockPane;
 import net.minecraft.block.BlockTallGrass;
 import net.minecraft.block.BlockTorch;
 import net.minecraft.block.material.Material;
@@ -52,13 +49,11 @@ public class HardnessThresholdPolicy implements BlockGrabPolicy {
         if (block instanceof BlockBush || block instanceof IPlantable
             || block instanceof BlockLeaves
             || block instanceof BlockTorch
-            || block instanceof BlockPane
-            || block instanceof BlockFence
-            || block instanceof BlockFenceGate) {
+            || block instanceof net.minecraft.block.BlockVine) {
             return true;
         }
         Material mat = block.getMaterial();
-        return mat == Material.plants || mat == Material.vine || mat == Material.leaves || mat == Material.cloth;
+        return mat == Material.plants || mat == Material.vine || mat == Material.leaves;
     }
 
     @Override

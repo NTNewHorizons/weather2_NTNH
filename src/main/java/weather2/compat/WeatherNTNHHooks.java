@@ -108,6 +108,10 @@ public class WeatherNTNHHooks {
         BlockProtectionPipeline.reconcileMovingBlocks(dim, storms);
     }
 
+    public static void reconcileMovingBlocks(net.minecraft.world.World world, java.util.List storms) {
+        BlockProtectionPipeline.reconcileMovingBlocks(world, storms);
+    }
+
     public static boolean isBlockProtected(Object blockObj) {
         return BlockProtectionPipeline.isBlockProtected(blockObj);
     }

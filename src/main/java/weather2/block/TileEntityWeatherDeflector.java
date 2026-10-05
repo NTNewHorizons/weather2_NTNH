@@ -29,8 +29,10 @@ public class TileEntityWeatherDeflector extends TileEntity
     public int deflectorRadius = 150;
 
     public long power = 0;
+    private long lastSavedPower = 0;
     public static final long maxPower = 100000000L;
     public static final long IDLE_DRAIN = 25000L;
+    public static final long DIRTY_POWER_THRESHOLD = 5000000L; // 5% of maxPower buffer
 
     // Explicit State Machine
     public DeflectorState state = DeflectorState.OFFLINE;
@@ -88,6 +90,7 @@ public class TileEntityWeatherDeflector extends TileEntity
             || newState == DeflectorState.OVERLOAD_COLLAPSED) ? timer : 0;
 
         if (worldObj != null && !worldObj.isRemote) {
+            this.lastSavedPower = this.power;
             this.markDirty();
             worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
             worldObj.notifyBlocksOfNeighborChange(xCoord, yCoord, zCoord, this.getBlockType());
@@ -133,10 +136,15 @@ public class TileEntityWeatherDeflector extends TileEntity
             if (this.state != this.prevState || this.isFieldActive != this.prevFieldActive) {
                 this.prevState = this.state;
                 this.prevFieldActive = this.isFieldActive;
+                this.lastSavedPower = this.power;
                 worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
                 markDirty();
             } else if ((time + (xCoord ^ zCoord)) % 40 == 0) {
                 worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
+                if (Math.abs(this.power - this.lastSavedPower) >= DIRTY_POWER_THRESHOLD) {
+                    this.lastSavedPower = this.power;
+                    markDirty();
+                }
             }
         } else {
             // Client-side ambient & diagnostic effects according to FSM state
@@ -227,8 +235,14 @@ public class TileEntityWeatherDeflector extends TileEntity
     @Override
     public void onChunkUnload() {
         super.onChunkUnload();
-        if (worldObj != null && !worldObj.isRemote && IntegrationManager.isHbmLoaded()) {
-            unsubscribeHbmConnections();
+        if (worldObj != null && !worldObj.isRemote) {
+            if (this.power != this.lastSavedPower || this.stateTimer > 0) {
+                this.lastSavedPower = this.power;
+                this.markDirty();
+            }
+            if (IntegrationManager.isHbmLoaded()) {
+                unsubscribeHbmConnections();
+            }
         }
     }
 
@@ -247,6 +261,7 @@ public class TileEntityWeatherDeflector extends TileEntity
     public void readFromNBT(NBTTagCompound nbt) {
         super.readFromNBT(nbt);
         this.power = nbt.getLong("power");
+        this.lastSavedPower = this.power;
         if (nbt.hasKey("deflectorState")) {
             this.state = DeflectorState.fromId(nbt.getByte("deflectorState"));
             this.stateTimer = nbt.getInteger("stateTimer");

@@ -58,8 +58,7 @@ public class WeatherManagerServer extends WeatherManagerBase {
         if (world != null) {
             // NTNH start: periodic cold-path reconciliation of moving blocks budget (every 100 ticks / 5s)
             if (world.getTotalWorldTime() % 100L == 0L && world.provider != null) {
-                weather2.compat.WeatherNTNHHooks
-                    .reconcileMovingBlocks(world.provider.dimensionId, this.getStormObjects());
+                weather2.compat.WeatherNTNHHooks.reconcileMovingBlocks(world, this.getStormObjects());
             }
             // NTNH end
 
@@ -75,12 +74,123 @@ public class WeatherManagerServer extends WeatherManagerBase {
                     .setThundering(false);
             }
 
-            if (this.tickerSyncWeatherCheckVanilla == ConfigMisc.tickerRateSyncWeatherCheckVanilla) {
-                this.isVanillaRainActiveOnServer = this.getWorld()
-                    .isRaining();
+            // NTNH start: immediate detection & sync of vanilla /weather rain, thunder, and clear transitions
+            boolean curRain = world.isRaining();
+            boolean curThunder = world.isThundering();
+            boolean rainStarted = curRain && !this.isVanillaRainActiveOnServer;
+            boolean thunderStarted = curThunder && !this.isVanillaThunderActiveOnServer;
+            boolean rainStopped = !curRain && this.isVanillaRainActiveOnServer;
+            if (curRain != this.isVanillaRainActiveOnServer || curThunder != this.isVanillaThunderActiveOnServer
+                || this.tickerSyncWeatherCheckVanilla >= ConfigMisc.tickerRateSyncWeatherCheckVanilla) {
+                this.isVanillaRainActiveOnServer = curRain;
+                this.isVanillaThunderActiveOnServer = curThunder;
                 this.syncWeatherVanilla();
                 this.tickerSyncWeatherCheckVanilla = 0;
             }
+
+            if ((rainStarted || thunderStarted)
+                && WeatherUtilConfig.listDimensionsClouds.contains(Integer.valueOf(world.provider.dimensionId))) {
+                HashSet updatedStorms = new HashSet();
+                for (int pIdx = 0; pIdx < world.playerEntities.size(); ++pIdx) {
+                    EntityPlayer entP = (EntityPlayer) world.playerEntities.get(pIdx);
+                    Vec3 playerSkyPos = Vec3
+                        .createVectorHelper(entP.posX, (double) StormObject.static_YPos_layer0, entP.posZ);
+                    StormObject so = this.getClosestStormAny(playerSkyPos, (double) ConfigMisc.Misc_simBoxRadiusCutoff);
+                    if (so == null) {
+                        so = new StormObject(this);
+                        so.initFirstTime();
+                        so.pos = Vec3.createVectorHelper(entP.posX, (double) StormObject.static_YPos_layer0, entP.posZ);
+                        so.posGround = Vec3.createVectorHelper(entP.posX, entP.posY, entP.posZ);
+                        so.size = Math.max(so.size, 150);
+                        so.layer = 0;
+                        so.userSpawnedFor = CoroUtilEntity.getName(entP);
+                        so.levelWater = Math.max(so.levelWater, so.levelWaterStartRaining * 2);
+                        so.setPrecipitating(true);
+                        so.hasStormPeaked = false;
+                        if (curThunder && so.levelCurIntensityStage < StormObject.STATE_THUNDER) {
+                            so.levelCurIntensityStage = StormObject.STATE_THUNDER;
+                            so.maxIntensityStage = StormObject.STATE_THUNDER;
+                        }
+                        this.addStormObject(so);
+                        this.syncStormNew(so);
+                    } else {
+                        if (so.pos.distanceTo(playerSkyPos) > (double) (so.size / 2)) {
+                            so.pos = Vec3
+                                .createVectorHelper(entP.posX, (double) StormObject.static_YPos_layer0, entP.posZ);
+                            so.posGround = Vec3.createVectorHelper(entP.posX, entP.posY, entP.posZ);
+                        }
+                        so.size = Math.max(so.size, 150);
+                        so.levelWater = Math.max(so.levelWater, so.levelWaterStartRaining * 2);
+                        so.setPrecipitating(true);
+                        so.hasStormPeaked = false;
+                        if (curThunder && so.levelCurIntensityStage < StormObject.STATE_THUNDER) {
+                            so.levelCurIntensityStage = StormObject.STATE_THUNDER;
+                            so.maxIntensityStage = StormObject.STATE_THUNDER;
+                        }
+                        updatedStorms.add(so.nbtSyncForClient());
+                    }
+                }
+                if (updatedStorms.size() > 0) {
+                    this.syncStormUpdate(updatedStorms);
+                }
+            } else if (rainStopped) {
+                HashSet clearedStorms = new HashSet();
+                for (int sIdx = 0; sIdx < this.getStormObjects()
+                    .size(); ++sIdx) {
+                    StormObject so = (StormObject) this.getStormObjects()
+                        .get(sIdx);
+                    if (so.attrib_precipitation || so.levelCurIntensityStage == StormObject.STATE_THUNDER) {
+                        so.setPrecipitating(false);
+                        so.levelWater = 0;
+                        if (so.levelCurIntensityStage == StormObject.STATE_THUNDER) {
+                            so.setNoStorm();
+                        }
+                        clearedStorms.add(so.nbtSyncForClient());
+                    }
+                }
+                if (clearedStorms.size() > 0) {
+                    this.syncStormUpdate(clearedStorms);
+                }
+            } else if (curRain && this.tickerSyncWeatherLowWind == 1
+                && WeatherUtilConfig.listDimensionsClouds.contains(Integer.valueOf(world.provider.dimensionId))) {
+                    for (int pIdx = 0; pIdx < world.playerEntities.size(); ++pIdx) {
+                        EntityPlayer entP = (EntityPlayer) world.playerEntities.get(pIdx);
+                        Vec3 playerSkyPos = Vec3
+                            .createVectorHelper(entP.posX, (double) StormObject.static_YPos_layer0, entP.posZ);
+                        StormObject activeThunderStorm = null;
+                        for (int sIdx = 0; sIdx < this.getStormObjects()
+                            .size(); ++sIdx) {
+                            StormObject candidate = (StormObject) this.getStormObjects()
+                                .get(sIdx);
+                            if (!candidate.isDead && candidate.layer == 0
+                                && candidate.levelCurIntensityStage >= StormObject.STATE_THUNDER
+                                && candidate.pos.distanceTo(playerSkyPos)
+                                    <= (double) ConfigMisc.Misc_simBoxRadiusCutoff) {
+                                activeThunderStorm = candidate;
+                                break;
+                            }
+                        }
+                        StormObject so = activeThunderStorm != null ? activeThunderStorm
+                            : this.getClosestStormAny(playerSkyPos, (double) ConfigMisc.Misc_simBoxRadiusCutoff);
+                        if (so != null) {
+                            if (curThunder && so.pos.distanceTo(playerSkyPos) > (double) (so.size / 2)) {
+                                so.pos = Vec3
+                                    .createVectorHelper(entP.posX, (double) StormObject.static_YPos_layer0, entP.posZ);
+                                so.posGround = Vec3.createVectorHelper(entP.posX, entP.posY, entP.posZ);
+                            }
+                            if (so.pos.distanceTo(playerSkyPos) <= (double) so.size) {
+                                so.levelWater = Math.max(so.levelWater, so.levelWaterStartRaining);
+                                so.setPrecipitating(true);
+                                if (curThunder && so.levelCurIntensityStage <= StormObject.STATE_THUNDER) {
+                                    so.levelCurIntensityStage = StormObject.STATE_THUNDER;
+                                    so.hasStormPeaked = false;
+                                    so.levelCurStagesIntensity = 0.0F;
+                                }
+                            }
+                        }
+                    }
+                }
+            // NTNH end
 
             boolean shouldUpdateHighWind = false;
             boolean shouldUpdateLowWind = false;
@@ -241,6 +351,12 @@ public class WeatherManagerServer extends WeatherManagerBase {
                         .get(i),
                     entP);
             }
+
+            // NTNH start: sync vanilla weather state immediately on player login
+            this.isVanillaRainActiveOnServer = world.isRaining();
+            this.isVanillaThunderActiveOnServer = world.isThundering();
+            this.syncWeatherVanilla();
+            // NTNH end
         }
 
     }
@@ -374,7 +490,14 @@ public class WeatherManagerServer extends WeatherManagerBase {
         NBTTagCompound data = new NBTTagCompound();
         data.setString("packetCommand", "WeatherData");
         data.setString("command", "syncWeatherUpdate");
+        // NTNH start: write both rain and thunder flags to root and 'data' sub-compound
         data.setBoolean("isVanillaRainActiveOnServer", this.isVanillaRainActiveOnServer);
+        data.setBoolean("isVanillaThunderActiveOnServer", this.isVanillaThunderActiveOnServer);
+        NBTTagCompound inner = new NBTTagCompound();
+        inner.setBoolean("isVanillaRainActiveOnServer", this.isVanillaRainActiveOnServer);
+        inner.setBoolean("isVanillaThunderActiveOnServer", this.isVanillaThunderActiveOnServer);
+        data.setTag("data", inner);
+        // NTNH end
         Weather.eventChannel.sendToDimension(
             PacketHelper.getNBTPacket(data, Weather.eventChannelName),
             this.getWorld().provider.dimensionId);

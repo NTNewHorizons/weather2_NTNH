@@ -63,6 +63,18 @@ public class BlockContext {
         return ctx;
     }
 
+    /**
+     * Clears strong references to World, TileEntity, Block, and StormObject after evaluation
+     * to prevent ThreadLocal memory retention across world unloads.
+     */
+    public void clearReferences() {
+        this.world = null;
+        this.block = null;
+        this.storm = null;
+        this.tileEntity = null;
+        this.registryName = null;
+    }
+
     public static BlockContext of(Object blockObj) {
         Block b = (blockObj instanceof Block) ? (Block) blockObj : null;
         return getPooled(null, 0, 0, 0, b, null);
