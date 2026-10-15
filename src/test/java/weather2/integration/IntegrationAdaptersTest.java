@@ -73,6 +73,14 @@ public class IntegrationAdaptersTest {
         // Constants
         assertEquals(100000000L, HbmEnergyAdapter.MAX_DEFLECTOR_POWER);
         assertEquals(25000L, HbmEnergyAdapter.IDLE_DRAIN);
+
+        // Safe connection handling without crash
+        HbmEnergyAdapter.updateConnections(null, null, 0, 0, 0);
+        HbmEnergyAdapter.unsubscribeConnections(null, null, 0, 0, 0);
+
+        IntegrationManager.setHbmLoaded(true);
+        AdapterReport report = HbmEnergyAdapter.INSTANCE.diagnose();
+        assertEquals(AdapterStatus.ACTIVE, report.getStatus());
     }
 
     @Test

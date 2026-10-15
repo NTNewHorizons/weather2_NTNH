@@ -216,12 +216,20 @@ public class TileEntityWeatherDeflector extends TileEntity
 
     @Optional.Method(modid = "hbm")
     private void updateHbmConnections() {
-        HbmEnergyAdapter.updateConnections(this, worldObj, xCoord, yCoord, zCoord);
+        try {
+            HbmEnergyAdapter.updateConnections(this, worldObj, xCoord, yCoord, zCoord);
+        } catch (Throwable ignored) {
+            // Hot-loop circuit breaker: shield ticking block entity from any third-party energy API error
+        }
     }
 
     @Optional.Method(modid = "hbm")
     private void unsubscribeHbmConnections() {
-        HbmEnergyAdapter.unsubscribeConnections(this, worldObj, xCoord, yCoord, zCoord);
+        try {
+            HbmEnergyAdapter.unsubscribeConnections(this, worldObj, xCoord, yCoord, zCoord);
+        } catch (Throwable ignored) {
+            // Defense-in-depth safe cleanup
+        }
     }
 
     @Override
