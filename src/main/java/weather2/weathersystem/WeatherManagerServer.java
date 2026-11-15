@@ -96,7 +96,7 @@ public class WeatherManagerServer extends WeatherManagerBase {
                     Vec3 playerSkyPos = Vec3
                         .createVectorHelper(entP.posX, (double) StormObject.static_YPos_layer0, entP.posZ);
                     StormObject so = this.getClosestStormAny(playerSkyPos, (double) ConfigMisc.Misc_simBoxRadiusCutoff);
-                    if (so == null) {
+                    if (so == null || so.levelCurIntensityStage >= StormObject.STATE_HIGHWIND) {
                         so = new StormObject(this);
                         so.initFirstTime();
                         so.pos = Vec3.createVectorHelper(entP.posX, (double) StormObject.static_YPos_layer0, entP.posZ);
@@ -139,7 +139,8 @@ public class WeatherManagerServer extends WeatherManagerBase {
                     .size(); ++sIdx) {
                     StormObject so = (StormObject) this.getStormObjects()
                         .get(sIdx);
-                    if (so.attrib_precipitation || so.levelCurIntensityStage == StormObject.STATE_THUNDER) {
+                    if (so.levelCurIntensityStage <= StormObject.STATE_THUNDER
+                        && (so.attrib_precipitation || so.levelCurIntensityStage == StormObject.STATE_THUNDER)) {
                         so.setPrecipitating(false);
                         so.levelWater = 0;
                         if (so.levelCurIntensityStage == StormObject.STATE_THUNDER) {
@@ -151,45 +152,7 @@ public class WeatherManagerServer extends WeatherManagerBase {
                 if (clearedStorms.size() > 0) {
                     this.syncStormUpdate(clearedStorms);
                 }
-            } else if (curRain && this.tickerSyncWeatherLowWind == 1
-                && WeatherUtilConfig.listDimensionsClouds.contains(Integer.valueOf(world.provider.dimensionId))) {
-                    for (int pIdx = 0; pIdx < world.playerEntities.size(); ++pIdx) {
-                        EntityPlayer entP = (EntityPlayer) world.playerEntities.get(pIdx);
-                        Vec3 playerSkyPos = Vec3
-                            .createVectorHelper(entP.posX, (double) StormObject.static_YPos_layer0, entP.posZ);
-                        StormObject activeThunderStorm = null;
-                        for (int sIdx = 0; sIdx < this.getStormObjects()
-                            .size(); ++sIdx) {
-                            StormObject candidate = (StormObject) this.getStormObjects()
-                                .get(sIdx);
-                            if (!candidate.isDead && candidate.layer == 0
-                                && candidate.levelCurIntensityStage >= StormObject.STATE_THUNDER
-                                && candidate.pos.distanceTo(playerSkyPos)
-                                    <= (double) ConfigMisc.Misc_simBoxRadiusCutoff) {
-                                activeThunderStorm = candidate;
-                                break;
-                            }
-                        }
-                        StormObject so = activeThunderStorm != null ? activeThunderStorm
-                            : this.getClosestStormAny(playerSkyPos, (double) ConfigMisc.Misc_simBoxRadiusCutoff);
-                        if (so != null) {
-                            if (curThunder && so.pos.distanceTo(playerSkyPos) > (double) (so.size / 2)) {
-                                so.pos = Vec3
-                                    .createVectorHelper(entP.posX, (double) StormObject.static_YPos_layer0, entP.posZ);
-                                so.posGround = Vec3.createVectorHelper(entP.posX, entP.posY, entP.posZ);
-                            }
-                            if (so.pos.distanceTo(playerSkyPos) <= (double) so.size) {
-                                so.levelWater = Math.max(so.levelWater, so.levelWaterStartRaining);
-                                so.setPrecipitating(true);
-                                if (curThunder && so.levelCurIntensityStage <= StormObject.STATE_THUNDER) {
-                                    so.levelCurIntensityStage = StormObject.STATE_THUNDER;
-                                    so.hasStormPeaked = false;
-                                    so.levelCurStagesIntensity = 0.0F;
-                                }
-                            }
-                        }
-                    }
-                }
+            }
             // NTNH end
 
             boolean shouldUpdateHighWind = false;
@@ -415,7 +378,7 @@ public class WeatherManagerServer extends WeatherManagerBase {
         NBTTagCompound data = new NBTTagCompound();
         data.setString("packetCommand", "WeatherData");
         data.setString("command", "syncStormNew");
-        data.setTag("data", parStorm.nbtSyncForClient());
+        data.setTag("data", parStorm.nbtSyncForClientFull());
         if (entP == null) {
             Weather.eventChannel.sendToDimension(
                 PacketHelper.getNBTPacket(data, Weather.eventChannelName),

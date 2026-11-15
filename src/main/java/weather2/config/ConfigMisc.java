@@ -51,7 +51,7 @@ public class ConfigMisc implements IConfigCategory {
 
     @ConfigComment({
         "Declarative weather profiles per dimension: dimToken, maxStage, alwaysProgresses, deadlyCooldown, lightningMultiplier, landSpawnOdds, oceanSpawnOdds, grabBlocks" })
-    public static String Dimension_Weather_Profiles = "0, 5, false, 3600, 0.25, 25, 0, true; duna, 9, false, 1800, 1.0, 10, 0, true; eve, 9, true, 800, 6.0, 3, 7, true; laythe, 9, false, 1800, 1.0, 10, 20, true; tekto, 8, false, 1800, 2.0, 10, 0, true";
+    public static String Dimension_Weather_Profiles = "0, 5, false, 216000, 0.25, 100, 0, true; duna, 9, false, 1800, 1.0, 10, 0, true; eve, 9, true, 800, 6.0, 3, 7, true; laythe, 9, false, 1800, 1.0, 10, 20, true; tekto, 8, false, 1800, 2.0, 10, 0, true";
     @ConfigComment({ "Maximum flying EntityMovingBlock entities allowed per dimension to protect server TPS" })
     public static int Storm_Tornado_maxBlocksPerDimension = 200;
     // NTNH end
@@ -73,7 +73,7 @@ public class ConfigMisc implements IConfigCategory {
     @ConfigComment({ "Prevents tearing up of dirt, grass, sand and logs, overrides all other conditions" })
     public static boolean Storm_Tornado_RefinedGrabRules = true;
     @ConfigComment({ "Make tornados initial heading aimed towards closest player" })
-    public static boolean Storm_Tornado_aimAtPlayerOnSpawn = true;
+    public static boolean Storm_Tornado_aimAtPlayerOnSpawn = false;
     @ConfigComment({ "Accuracy of tornado aimed at player" })
     public static int Storm_Tornado_aimAtPlayerAngleVariance = 5;
     @ConfigComment({ "Makes weather boring! or peacefull?" })
@@ -94,7 +94,7 @@ public class ConfigMisc implements IConfigCategory {
     public static int Storm_Rain_WaterBuildUpOddsTo1FromNothing = 100;
     public static int Storm_Rain_WaterBuildUp = 150;
     public static double Storm_TemperatureAdjustRate = 0.1D;
-    public static int Storm_HailPerTick = 10;
+    public static int Storm_HailPerTick = 3;
     public static int Storm_OddsTo1OfOceanBasedStorm = 300;
     public static int Storm_OddsTo1OfLandBasedStorm = -1;
     public static int Storm_OddsTo1OfProgressionBase = 15;

@@ -82,7 +82,7 @@ public class EntityMovingBlock extends Entity implements IEntityAdditionalSpawnD
     }
 
     public boolean isInRangeToRenderDist(double var1) {
-        return true;
+        return var1 < 256.0D * 256.0D;
     }
 
     public boolean canTriggerWalking() {

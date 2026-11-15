@@ -24,7 +24,7 @@ public class EventHandlerForge {
 
     @SubscribeEvent
     @SideOnly(Side.CLIENT)
-    public void registerIcons(TextureStitchEvent event) {
+    public void registerIcons(TextureStitchEvent.Pre event) {
         if (event.map.getTextureType() == 1) {
             ClientProxy.radarIconRain = event.map.registerIcon(Weather.modID + ":radar/radarIconRain");
             ClientProxy.radarIconLightning = event.map.registerIcon(Weather.modID + ":radar/radarIconLightning");

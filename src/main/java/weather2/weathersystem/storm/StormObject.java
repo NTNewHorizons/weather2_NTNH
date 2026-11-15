@@ -159,25 +159,47 @@ public class StormObject {
         this.isDead = false;
         this.ticksSinceLastPacketReceived = 0L;
         this.manager = parManager;
-        if (parManager.getWorld().isRemote) {
+        if (this.isClientSide()) {
             this.listParticlesCloud = new ArrayList();
             this.listParticlesFunnel = new ArrayList();
             this.listParticlesGround = new ArrayList();
-            this.renderBlock = new RenderCubeCloud();
+            if (parManager != null && parManager.getWorld() != null) {
+                this.renderBlock = new RenderCubeCloud();
+            }
         }
 
     }
 
+    private boolean isClientSide() {
+        if (this.manager instanceof weather2.weathersystem.WeatherManagerClient) {
+            return true;
+        }
+        if (this.manager instanceof weather2.weathersystem.WeatherManagerServer) {
+            return false;
+        }
+        if (this.manager != null && this.manager.getWorld() != null) {
+            return this.manager.getWorld().isRemote;
+        }
+        try {
+            return FMLCommonHandler.instance() != null && FMLCommonHandler.instance()
+                .getEffectiveSide() == Side.CLIENT;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     public void initFirstTime() {
         this.ID = (long) (lastUsedStormID++);
+        int ix = MathHelper.floor_double(this.pos.xCoord);
+        int iz = MathHelper.floor_double(this.pos.zCoord);
         BiomeGenBase bgb = this.manager.getWorld()
-            .getBiomeGenForCoords(MathHelper.floor_double(this.pos.xCoord), MathHelper.floor_double(this.pos.zCoord));
+            .blockExists(ix, 64, iz)
+                ? this.manager.getWorld()
+                    .getBiomeGenForCoords(ix, iz)
+                : null;
         float temp = 1.0F;
         if (bgb != null) {
-            temp = bgb.getFloatTemperature(
-                MathHelper.floor_double(this.pos.xCoord),
-                MathHelper.floor_double(this.pos.yCoord),
-                MathHelper.floor_double(this.pos.zCoord));
+            temp = bgb.getFloatTemperature(ix, MathHelper.floor_double(this.pos.yCoord), iz);
         }
 
         if (this.naturallySpawned) {
@@ -224,16 +246,29 @@ public class StormObject {
         this.motion = Vec3.createVectorHelper(var1.getDouble("vecX"), var1.getDouble("vecY"), var1.getDouble("vecZ"));
         this.angleIsOverridden = var1.getBoolean("angleIsOverridden");
         this.angleMovementTornadoOverride = var1.getFloat("angleMovementTornadoOverride");
+        if (var1.hasKey("userSpawnedFor")) {
+            this.userSpawnedFor = var1.getString("userSpawnedFor");
+        }
+        if (var1.hasKey("maxIntensityStage")) {
+            this.maxIntensityStage = var1.getInteger("maxIntensityStage");
+        }
+        if (var1.hasKey("alwaysProgresses")) {
+            this.alwaysProgresses = var1.getBoolean("alwaysProgresses");
+        }
     }
 
     public NBTTagCompound writeToNBT() {
-        this.nbtSyncForClient();
-        NBTTagCompound nbt = this.cachedClientNBTState;
-        nbt.setDouble("vecX", this.motion.xCoord);
-        nbt.setDouble("vecY", this.motion.yCoord);
-        nbt.setDouble("vecZ", this.motion.zCoord);
+        NBTTagCompound nbt = this.nbtSyncForClientFull();
+        if (this.motion != null) {
+            nbt.setDouble("vecX", this.motion.xCoord);
+            nbt.setDouble("vecY", this.motion.yCoord);
+            nbt.setDouble("vecZ", this.motion.zCoord);
+        }
         nbt.setBoolean("angleIsOverridden", this.angleIsOverridden);
         nbt.setFloat("angleMovementTornadoOverride", this.angleMovementTornadoOverride);
+        nbt.setString("userSpawnedFor", this.userSpawnedFor != null ? this.userSpawnedFor : "");
+        nbt.setInteger("maxIntensityStage", this.maxIntensityStage);
+        nbt.setBoolean("alwaysProgresses", this.alwaysProgresses);
         return nbt;
     }
 
@@ -241,9 +276,15 @@ public class StormObject {
         StormObject.CachedNBTTagCompound newData = new StormObject.CachedNBTTagCompound(parNBT);
         newData.setCachedNBT(this.cachedClientNBTState);
         this.ID = newData.getLong("ID");
+        this.layer = newData.getInteger("layer");
+        int syncY = newData.getInteger("posY");
+        if (syncY <= 0) {
+            int layerIdx = Math.max(0, Math.min(layers.size() - 1, this.layer));
+            syncY = ((Integer) layers.get(layerIdx)).intValue();
+        }
         this.pos = Vec3.createVectorHelper(
             (double) newData.getInteger("posX"),
-            (double) newData.getInteger("posY"),
+            (double) syncY,
             (double) newData.getInteger("posZ"));
         this.size = newData.getInteger("size");
         this.maxSize = newData.getInteger("maxSize");
@@ -252,22 +293,18 @@ public class StormObject {
         this.currentTopYBlock = newData.getInteger("currentTopYBlock");
         this.levelTemperature = newData.getFloat("levelTemperature");
         this.levelWater = newData.getInteger("levelWater");
-        this.layer = newData.getInteger("layer");
         this.levelCurIntensityStage = newData.getInteger("levelCurIntensityStage");
         this.levelCurStagesIntensity = newData.getFloat("levelCurStagesIntensity");
         this.stormType = newData.getInteger("stormType");
         this.hasStormPeaked = newData.getBoolean("hasStormPeaked");
         this.isDead = newData.getBoolean("isDead");
-        this.cachedClientNBTState = newData.getNewNBT();
+        this.cachedClientNBTState = newData.getCachedNBT();
         this.ticksSinceLastPacketReceived = 0L;
     }
 
-    public NBTTagCompound nbtSyncForClient() {
-        StormObject.CachedNBTTagCompound data = new StormObject.CachedNBTTagCompound();
-        data.setCachedNBT(this.cachedClientNBTState);
-        data.setUpdateForced(true);
+    public NBTTagCompound nbtSyncForClientFull() {
+        NBTTagCompound data = new NBTTagCompound();
         data.setLong("ID", this.ID);
-        data.setUpdateForced(false);
         data.setInteger("posX", (int) this.pos.xCoord);
         data.setInteger("posY", (int) this.pos.yCoord);
         data.setInteger("posZ", (int) this.pos.zCoord);
@@ -284,25 +321,92 @@ public class StormObject {
         data.setInteger("stormType", this.stormType);
         data.setBoolean("hasStormPeaked", this.hasStormPeaked);
         data.setBoolean("isDead", this.isDead);
+        return data;
+    }
+
+    public NBTTagCompound nbtSyncForClient() {
+        StormObject.CachedNBTTagCompound data = new StormObject.CachedNBTTagCompound();
+        data.setCachedNBT(this.cachedClientNBTState);
+        // Always include critical spatial & visual state so clients never desync on stage, funnel height, or position
+        data.setUpdateForced(true);
+        data.setLong("ID", this.ID);
+        data.setInteger("posX", (int) this.pos.xCoord);
+        data.setInteger("posY", (int) this.pos.yCoord);
+        data.setInteger("posZ", (int) this.pos.zCoord);
+        data.setInteger("size", this.size);
+        data.setBoolean("attrib_rain", this.attrib_precipitation);
+        data.setBoolean("attrib_waterSpout", this.attrib_waterSpout);
+        data.setInteger("currentTopYBlock", this.currentTopYBlock);
+        data.setInteger("layer", this.layer);
+        data.setInteger("levelCurIntensityStage", this.levelCurIntensityStage);
+        data.setFloat("levelCurStagesIntensity", this.levelCurStagesIntensity);
+        data.setInteger("stormType", this.stormType);
+        data.setBoolean("hasStormPeaked", this.hasStormPeaked);
+        data.setBoolean("isDead", this.isDead);
+        data.setUpdateForced(false);
+        data.setInteger("maxSize", this.maxSize);
+        data.setFloat("levelTemperature", this.levelTemperature);
+        data.setInteger("levelWater", this.levelWater);
         this.cachedClientNBTState = data.getCachedNBT();
         return data.getNewNBT();
     }
 
     public NBTTagCompound nbtForIMC() {
-        return this.nbtSyncForClient();
+        return this.nbtSyncForClientFull();
     }
 
     @SideOnly(Side.CLIENT)
     public void tickRender(float partialTick) {
         if (this.layer == 1) {
+            if (this.renderBlock == null) {
+                this.renderBlock = new RenderCubeCloud();
+            }
             this.renderBlock.doRenderClouds(this, this.pos.xCoord, this.pos.yCoord, this.pos.zCoord, 0.0F, partialTick);
         }
 
     }
 
+    private void updateFormationPositions() {
+        if (this.currentTopYBlock <= 0 && this.manager != null && this.manager.getWorld() != null) {
+            World w = this.manager.getWorld();
+            int ix = MathHelper.floor_double(this.pos.xCoord);
+            int iz = MathHelper.floor_double(this.pos.zCoord);
+            if (w.blockExists(ix, 64, iz)) {
+                int h = w.getHeightValue(ix, iz);
+                if (h > 0) {
+                    this.currentTopYBlock = h;
+                }
+            }
+            if (this.currentTopYBlock <= 0) {
+                this.currentTopYBlock = 64;
+            }
+        }
+        this.posGround = Vec3.createVectorHelper(this.pos.xCoord, (double) this.currentTopYBlock, this.pos.zCoord);
+        if (this.layer == 0) {
+            this.posBaseFormationPos = Vec3.createVectorHelper(this.pos.xCoord, this.pos.yCoord, this.pos.zCoord);
+            if ((float) this.levelCurIntensityStage >= levelStormIntensityFormingStartVal) {
+                if ((float) this.levelCurIntensityStage >= levelStormIntensityFormingStartVal + 1.0F) {
+                    this.formingStrength = 1.0F;
+                    this.posBaseFormationPos.yCoord = this.posGround.yCoord;
+                } else {
+                    float intensityAdj = Math.min(1.0F, this.levelCurStagesIntensity * 2.0F);
+                    float val = (float) this.levelCurIntensityStage + intensityAdj - levelStormIntensityFormingStartVal;
+                    this.formingStrength = val;
+                    double yDiff = this.pos.yCoord - this.posGround.yCoord;
+                    this.posBaseFormationPos.yCoord = this.pos.yCoord - yDiff * (double) this.formingStrength;
+                }
+            } else if (this.levelCurIntensityStage == STATE_HIGHWIND) {
+                this.formingStrength = 1.0F;
+                this.posBaseFormationPos.yCoord = this.posGround.yCoord;
+            } else {
+                this.formingStrength = 0.0F;
+                this.posBaseFormationPos.yCoord = this.pos.yCoord;
+            }
+        }
+    }
+
     public void tick() {
-        this.posGround = Vec3.createVectorHelper(this.pos.xCoord, this.pos.yCoord, this.pos.zCoord);
-        this.posGround.yCoord = (double) this.currentTopYBlock;
+        this.updateFormationPositions();
         Side side = FMLCommonHandler.instance()
             .getEffectiveSide();
         if (side == Side.CLIENT) {
@@ -337,30 +441,8 @@ public class StormObject {
                 this.tickProgression();
                 this.tickSnowFall();
             }
+            this.updateFormationPositions();
         }
-
-        if (this.layer == 0) {
-            this.posBaseFormationPos = Vec3.createVectorHelper(this.pos.xCoord, this.pos.yCoord, this.pos.zCoord);
-            if ((float) this.levelCurIntensityStage >= levelStormIntensityFormingStartVal) {
-                if ((float) this.levelCurIntensityStage >= levelStormIntensityFormingStartVal + 1.0F) {
-                    this.formingStrength = 1.0F;
-                    this.posBaseFormationPos.yCoord = this.posGround.yCoord;
-                } else {
-                    float intensityAdj = Math.min(1.0F, this.levelCurStagesIntensity * 2.0F);
-                    float val = (float) this.levelCurIntensityStage + intensityAdj - levelStormIntensityFormingStartVal;
-                    this.formingStrength = val;
-                    double yDiff = this.pos.yCoord - this.posGround.yCoord;
-                    this.posBaseFormationPos.yCoord = this.pos.yCoord - yDiff * (double) this.formingStrength;
-                }
-            } else if (this.levelCurIntensityStage == STATE_HIGHWIND) {
-                this.formingStrength = 1.0F;
-                this.posBaseFormationPos.yCoord = this.posGround.yCoord;
-            } else {
-                this.formingStrength = 0.0F;
-                this.posBaseFormationPos.yCoord = this.pos.yCoord;
-            }
-        }
-
     }
 
     public void tickMovement() {
@@ -636,17 +718,17 @@ public class StormObject {
         boolean isOverWater = false;
         if (world.getTotalWorldTime() % (long) ConfigMisc.Storm_AllTypes_TickRateDelay == 0L) {
             NBTTagCompound playerNBT = PlayerData.getPlayerNBT(this.userSpawnedFor);
-            long lastStormDeadlyTime = playerNBT.getLong("lastStormDeadlyTime");
-            BiomeGenBase bgb = world.getBiomeGenForCoords(
-                MathHelper.floor_double(this.pos.xCoord),
-                MathHelper.floor_double(this.pos.zCoord));
+            int dimId = world.provider != null ? world.provider.dimensionId : 0;
+            String deadlyTimeKey = dimId == 0 ? "lastStormDeadlyTime" : ("lastStormDeadlyTime_dim_" + dimId);
+            long lastStormDeadlyTime = playerNBT.getLong(deadlyTimeKey);
+            int ix = MathHelper.floor_double(this.pos.xCoord);
+            int iz = MathHelper.floor_double(this.pos.zCoord);
+            boolean chunkLoaded = world.blockExists(ix, 64, iz);
+            BiomeGenBase bgb = chunkLoaded ? world.getBiomeGenForCoords(ix, iz) : null;
             if (bgb != null) {
                 isInOcean = bgb.biomeName.contains("Ocean") || bgb.biomeName.contains("ocean");
                 float performBuildup = this.getTemperatureMCToWeatherSys(
-                    bgb.getFloatTemperature(
-                        MathHelper.floor_double(this.pos.xCoord),
-                        MathHelper.floor_double(this.pos.yCoord),
-                        MathHelper.floor_double(this.pos.zCoord)));
+                    bgb.getFloatTemperature(ix, MathHelper.floor_double(this.pos.yCoord), iz));
                 if (this.levelTemperature > performBuildup) {
                     this.levelTemperature -= tempAdjustRate;
                 } else {
@@ -660,12 +742,11 @@ public class StormObject {
                 var24 = true;
             }
 
-            Block blockID = world.getBlock(
-                MathHelper.floor_double(this.pos.xCoord),
-                this.currentTopYBlock - 1,
-                MathHelper.floor_double(this.pos.zCoord));
-            if (!CoroUtilBlock.isAir(blockID) && blockID.getMaterial() instanceof MaterialLiquid) {
-                isOverWater = true;
+            if (chunkLoaded && this.currentTopYBlock > 0) {
+                Block blockID = world.getBlock(ix, this.currentTopYBlock - 1, iz);
+                if (!CoroUtilBlock.isAir(blockID) && blockID.getMaterial() instanceof MaterialLiquid) {
+                    isOverWater = true;
+                }
             }
 
             if (!var24 && !this.isPrecipitating() && rand.nextInt(randomChanceOfWaterBuildFromWater) == 0) {
@@ -706,18 +787,41 @@ public class StormObject {
             WeatherManagerServer wm = (WeatherManagerServer) ServerTickHandler.lookupDimToWeatherMan
                 .get(Integer.valueOf(world.provider.dimensionId));
             boolean tryFormStorm = false;
-            // NTNH start: dynamic deadly cooldown (Eve 800 ticks vs base 1800)
+            // NTNH start: per-dimension deadly cooldown (Overworld 3h=216000t, planets 1800t, Eve 800t)
             int deadlyTimeBetween = weather2.compat.WeatherNTNHHooks
                 .getDeadlyTimeBetween(ConfigMisc.Player_Storm_Deadly_TimeBetweenInTicks, this);
-            if (ConfigMisc.Server_Storm_Deadly_UseGlobalRate) {
-                if (ConfigMisc.Server_Storm_Deadly_TimeBetweenInTicks != -1 && (wm.lastStormFormed == 0L
-                    || wm.lastStormFormed + (long) deadlyTimeBetween < world.getTotalWorldTime())) {
+            long now = world.getTotalWorldTime();
+            if (dimId == 0) {
+                // In Overworld, initialize baseline timestamp so new worlds wait a full cooldown cycle
+                if (wm != null && (wm.lastStormFormed == 0L || wm.lastStormFormed > now)) {
+                    wm.lastStormFormed = now;
+                }
+                if (lastStormDeadlyTime == 0L || lastStormDeadlyTime > now) {
+                    lastStormDeadlyTime = now;
+                    playerNBT.setLong(deadlyTimeKey, now);
+                }
+            } else {
+                if (wm != null && wm.lastStormFormed > now) {
+                    wm.lastStormFormed = 0L;
+                }
+                if (lastStormDeadlyTime > now) {
+                    lastStormDeadlyTime = 0L;
+                    playerNBT.setLong(deadlyTimeKey, 0L);
+                }
+            }
+
+            boolean globalReady = wm == null || wm.lastStormFormed == 0L
+                || wm.lastStormFormed + (long) deadlyTimeBetween < now;
+            boolean playerReady = lastStormDeadlyTime == 0L || lastStormDeadlyTime + (long) deadlyTimeBetween < now;
+            if (deadlyTimeBetween < Integer.MAX_VALUE) {
+                if (ConfigMisc.Server_Storm_Deadly_UseGlobalRate) {
+                    if (ConfigMisc.Server_Storm_Deadly_TimeBetweenInTicks != -1 && globalReady) {
+                        tryFormStorm = true;
+                    }
+                } else if (ConfigMisc.Player_Storm_Deadly_TimeBetweenInTicks != -1 && globalReady && playerReady) {
                     tryFormStorm = true;
                 }
-            } else if (ConfigMisc.Player_Storm_Deadly_TimeBetweenInTicks != -1 && (lastStormDeadlyTime == 0L
-                || lastStormDeadlyTime + (long) deadlyTimeBetween < world.getTotalWorldTime())) {
-                    tryFormStorm = true;
-                }
+            }
             // NTNH end
 
             int oddsTo1OfIntensityProgressionBase;
@@ -729,12 +833,16 @@ public class StormObject {
                 int levelStormIntensityRate = ConfigMisc.Storm_Deadly_CollideDistance;
                 int minIntensityToProgress = ConfigMisc.Player_Storm_Deadly_OddsTo1;
                 EntityPlayer var27;
-                // NTNH start: dynamic planetary spawn odds (Eve accelerated / Duna / Tekto)
+                // NTNH start: dynamic planetary spawn odds (Eve accelerated / Duna / Tekto / rare Overworld)
                 int oceanOdds = weather2.compat.WeatherNTNHHooks
                     .getOceanStormOdds(ConfigMisc.Storm_OddsTo1OfOceanBasedStorm, this);
                 int landOdds = weather2.compat.WeatherNTNHHooks
                     .getLandStormOdds(ConfigMisc.Storm_OddsTo1OfLandBasedStorm, this);
-                if (isInOcean && oceanOdds > 0 && rand.nextInt(oceanOdds) == 0) {
+                int collideOdds = minIntensityToProgress;
+                if (landOdds > 0 && landOdds < Integer.MAX_VALUE && landOdds > collideOdds) {
+                    collideOdds = landOdds;
+                }
+                if (isInOcean && oceanOdds > 0 && oceanOdds < Integer.MAX_VALUE && rand.nextInt(oceanOdds) == 0) {
                     var27 = world.getPlayerEntityByName(this.userSpawnedFor);
                     if (var27 != null) {
                         this.initRealStorm(var27, (StormObject) null);
@@ -742,12 +850,11 @@ public class StormObject {
                         this.initRealStorm((EntityPlayer) null, (StormObject) null);
                     }
 
-                    if (ConfigMisc.Server_Storm_Deadly_UseGlobalRate) {
-                        wm.lastStormFormed = world.getTotalWorldTime();
-                    } else {
-                        playerNBT.setLong("lastStormDeadlyTime", world.getTotalWorldTime());
+                    if (wm != null) {
+                        wm.lastStormFormed = now;
                     }
-                } else if (!isInOcean && landOdds > 0 && rand.nextInt(landOdds) == 0) {
+                    playerNBT.setLong(deadlyTimeKey, now);
+                } else if (!isInOcean && landOdds > 0 && landOdds < Integer.MAX_VALUE && rand.nextInt(landOdds) == 0) {
                     var27 = world.getPlayerEntityByName(this.userSpawnedFor);
                     if (var27 != null) {
                         this.initRealStorm(var27, (StormObject) null);
@@ -755,46 +862,49 @@ public class StormObject {
                         this.initRealStorm((EntityPlayer) null, (StormObject) null);
                     }
 
-                    if (ConfigMisc.Server_Storm_Deadly_UseGlobalRate) {
-                        wm.lastStormFormed = world.getTotalWorldTime();
-                    } else {
-                        playerNBT.setLong("lastStormDeadlyTime", world.getTotalWorldTime());
+                    if (wm != null) {
+                        wm.lastStormFormed = now;
                     }
+                    playerNBT.setLong(deadlyTimeKey, now);
                 }
                 // NTNH end
-                else if (rand.nextInt(minIntensityToProgress) == 0) {
-                    for (oddsTo1OfIntensityProgressionBase = 0; oddsTo1OfIntensityProgressionBase
-                        < this.manager.getStormObjects()
-                            .size(); ++oddsTo1OfIntensityProgressionBase) {
-                        StormObject oddsTo1OfIntensityProgression = (StormObject) this.manager.getStormObjects()
-                            .get(oddsTo1OfIntensityProgressionBase);
-                        boolean startStorm = false;
-                        if (oddsTo1OfIntensityProgression.ID != this.ID
-                            && oddsTo1OfIntensityProgression.levelCurIntensityStage <= 0
-                            && oddsTo1OfIntensityProgression.pos.distanceTo(this.pos)
-                                < (double) levelStormIntensityRate) {
-                            if (this.levelTemperature < 0.0F) {
-                                if (oddsTo1OfIntensityProgression.levelTemperature > 0.0F) {
-                                    startStorm = true;
-                                }
-                            } else if (this.levelTemperature > 0.0F
-                                && oddsTo1OfIntensityProgression.levelTemperature < 0.0F) {
-                                    startStorm = true;
-                                }
-                        }
-
-                        if (startStorm) {
-                            playerNBT.setLong("lastStormDeadlyTime", world.getTotalWorldTime());
-                            EntityPlayer entP = world.getPlayerEntityByName(this.userSpawnedFor);
-                            if (entP != null) {
-                                this.initRealStorm(entP, oddsTo1OfIntensityProgression);
-                            } else {
-                                this.initRealStorm((EntityPlayer) null, oddsTo1OfIntensityProgression);
+                else if ((landOdds < Integer.MAX_VALUE || oceanOdds < Integer.MAX_VALUE) && collideOdds > 0
+                    && rand.nextInt(collideOdds) == 0) {
+                        for (oddsTo1OfIntensityProgressionBase = 0; oddsTo1OfIntensityProgressionBase
+                            < this.manager.getStormObjects()
+                                .size(); ++oddsTo1OfIntensityProgressionBase) {
+                            StormObject oddsTo1OfIntensityProgression = (StormObject) this.manager.getStormObjects()
+                                .get(oddsTo1OfIntensityProgressionBase);
+                            boolean startStorm = false;
+                            if (oddsTo1OfIntensityProgression.ID != this.ID
+                                && oddsTo1OfIntensityProgression.levelCurIntensityStage <= 0
+                                && oddsTo1OfIntensityProgression.pos.distanceTo(this.pos)
+                                    < (double) levelStormIntensityRate) {
+                                if (this.levelTemperature < 0.0F) {
+                                    if (oddsTo1OfIntensityProgression.levelTemperature > 0.0F) {
+                                        startStorm = true;
+                                    }
+                                } else if (this.levelTemperature > 0.0F
+                                    && oddsTo1OfIntensityProgression.levelTemperature < 0.0F) {
+                                        startStorm = true;
+                                    }
                             }
-                            break;
+
+                            if (startStorm) {
+                                if (wm != null) {
+                                    wm.lastStormFormed = now;
+                                }
+                                playerNBT.setLong(deadlyTimeKey, now);
+                                EntityPlayer entP = world.getPlayerEntityByName(this.userSpawnedFor);
+                                if (entP != null) {
+                                    this.initRealStorm(entP, oddsTo1OfIntensityProgression);
+                                } else {
+                                    this.initRealStorm((EntityPlayer) null, oddsTo1OfIntensityProgression);
+                                }
+                                break;
+                            }
                         }
                     }
-                }
             }
 
             if (this.isRealStorm()) {
@@ -1052,8 +1162,8 @@ public class StormObject {
         }
 
         if (this.levelCurIntensityStage >= STATE_HIGHWIND) {
-            for (spawnRad = 0; spawnRad < (this.stormType == TYPE_WATER ? 50 : 3); ++spawnRad) {
-                if (this.listParticlesGround.size() < (this.stormType == TYPE_WATER ? 600 : 150)) {
+            for (spawnRad = 0; spawnRad < (this.stormType == TYPE_WATER ? 10 : 2); ++spawnRad) {
+                if (this.listParticlesGround.size() < (this.stormType == TYPE_WATER ? 240 : 100)) {
                     spawnRad1 = (double) (this.size / 4 * 3);
                     if (this.stormType == TYPE_WATER) {
                         spawnRad1 = (double) (this.size * 3);
@@ -1081,22 +1191,22 @@ public class StormObject {
         double var36 = (double) (this.size / 48);
         if (this.levelCurIntensityStage >= STATE_STAGE5) {
             var36 = 200.0D;
-            var35 = 10;
-            this.sizeMaxFunnelParticles = 1200;
+            var35 = 6;
+            this.sizeMaxFunnelParticles = 600;
         } else if (this.levelCurIntensityStage >= STATE_STAGE4) {
             var36 = 150.0D;
-            var35 = 8;
-            this.sizeMaxFunnelParticles = 1000;
+            var35 = 5;
+            this.sizeMaxFunnelParticles = 500;
         } else if (this.levelCurIntensityStage >= STATE_STAGE3) {
             var36 = 100.0D;
-            var35 = 6;
-            this.sizeMaxFunnelParticles = 800;
+            var35 = 4;
+            this.sizeMaxFunnelParticles = 450;
         } else if (this.levelCurIntensityStage >= STATE_STAGE2) {
             var36 = 50.0D;
-            var35 = 4;
-            this.sizeMaxFunnelParticles = 600;
+            var35 = 3;
+            this.sizeMaxFunnelParticles = 400;
         } else {
-            this.sizeMaxFunnelParticles = 600;
+            this.sizeMaxFunnelParticles = 350;
         }
 
         int i;
@@ -1151,10 +1261,10 @@ public class StormObject {
         for (i = 0; i < this.listParticlesFunnel.size(); ++i) {
             var37 = (EntityRotFX) this.listParticlesFunnel.get(i);
             if (var37.isDead) {
-                this.listParticlesFunnel.remove(var37);
+                this.listParticlesFunnel.remove(i--);
             } else if (var37.posY > this.pos.yCoord) {
                 var37.setDead();
-                this.listParticlesFunnel.remove(var37);
+                this.listParticlesFunnel.remove(i--);
             } else {
                 var39 = this.pos.xCoord - var37.posX;
                 var41 = this.pos.zCoord - var37.posZ;
@@ -1185,7 +1295,7 @@ public class StormObject {
         for (i = 0; i < this.listParticlesCloud.size(); ++i) {
             var37 = (EntityRotFX) this.listParticlesCloud.get(i);
             if (var37.isDead) {
-                this.listParticlesCloud.remove(var37);
+                this.listParticlesCloud.remove(i--);
             } else {
                 var39 = Math.sqrt(
                     var37.motionX * var37.motionX + var37.motionY * var37.motionY + var37.motionZ * var37.motionZ);
@@ -1280,7 +1390,7 @@ public class StormObject {
             var37 = (EntityRotFX) this.listParticlesGround.get(i);
             var39 = var37.getDistance(this.pos.xCoord, var37.posY, this.pos.zCoord);
             if (var37.isDead) {
-                this.listParticlesGround.remove(var37);
+                this.listParticlesGround.remove(i--);
             } else {
                 var41 = Math.sqrt(
                     var37.motionX * var37.motionX + var37.motionY * var37.motionY + var37.motionZ * var37.motionZ);
@@ -1586,8 +1696,7 @@ public class StormObject {
 
     public void setDead() {
         this.isDead = true;
-        if (FMLCommonHandler.instance()
-            .getEffectiveSide() == Side.CLIENT) {
+        if (this.isClientSide()) {
             this.cleanupClient();
         }
 
@@ -1605,9 +1714,32 @@ public class StormObject {
 
     @SideOnly(Side.CLIENT)
     public void cleanupClient() {
-        this.listParticlesCloud.clear();
-        this.listParticlesFunnel.clear();
+        if (this.listParticlesCloud != null) {
+            for (int i = 0; i < this.listParticlesCloud.size(); ++i) {
+                EntityRotFX fx = (EntityRotFX) this.listParticlesCloud.get(i);
+                if (fx != null) fx.setDead();
+            }
+            this.listParticlesCloud.clear();
+        }
+        if (this.listParticlesFunnel != null) {
+            for (int i = 0; i < this.listParticlesFunnel.size(); ++i) {
+                EntityRotFX fx = (EntityRotFX) this.listParticlesFunnel.get(i);
+                if (fx != null) fx.setDead();
+            }
+            this.listParticlesFunnel.clear();
+        }
+        if (this.listParticlesGround != null) {
+            for (int i = 0; i < this.listParticlesGround.size(); ++i) {
+                EntityRotFX fx = (EntityRotFX) this.listParticlesGround.get(i);
+                if (fx != null) fx.setDead();
+            }
+            this.listParticlesGround.clear();
+        }
         if (this.particleBehaviorFog != null && this.particleBehaviorFog.particles != null) {
+            for (int i = 0; i < this.particleBehaviorFog.particles.size(); ++i) {
+                EntityRotFX fx = (EntityRotFX) this.particleBehaviorFog.particles.get(i);
+                if (fx != null) fx.setDead();
+            }
             this.particleBehaviorFog.particles.clear();
         }
 

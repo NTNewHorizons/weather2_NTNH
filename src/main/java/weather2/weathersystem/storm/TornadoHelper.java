@@ -69,16 +69,23 @@ public class TornadoHelper {
             this.forceRotate(parWorld);
             Random rand = new Random();
             int spawnYOffset = (int) this.storm.posBaseFormationPos.yCoord;
-            // NTNH start: check planetary block grab permission
+            // NTNH start: check planetary block grab permission and nearby player presence
             if (!parWorld.isRemote && ConfigMisc.Storm_Tornado_grabBlocks
-                && weather2.compat.WeatherNTNHHooks.canTornadoGrabBlocks(this.storm)) {
+                && weather2.compat.WeatherNTNHHooks.canTornadoGrabBlocks(this.storm)
+                && parWorld.getClosestPlayer(
+                    this.storm.posBaseFormationPos.xCoord,
+                    this.storm.posBaseFormationPos.yCoord,
+                    this.storm.posBaseFormationPos.zCoord,
+                    140.0D) != null) {
                 // NTNH end
                 byte yStart = 0;
-                int yEnd = (int) this.storm.pos.yCoord;
+                int yEnd = Math.min(40, (int) this.storm.pos.yCoord);
                 byte yInc = 1;
-                BiomeGenBase bgb = parWorld.getBiomeGenForCoords(
-                    MathHelper.floor_double(this.storm.pos.xCoord),
-                    MathHelper.floor_double(this.storm.pos.zCoord));
+                int centerX = MathHelper.floor_double(this.storm.pos.xCoord);
+                int centerZ = MathHelper.floor_double(this.storm.pos.zCoord);
+                BiomeGenBase bgb = parWorld.blockExists(centerX, 64, centerZ)
+                    ? parWorld.getBiomeGenForCoords(centerX, centerZ)
+                    : null;
                 if (bgb != null && (double) (bgb.rootHeight + bgb.heightVariation) <= 0.7D) {
                     int k;
                     int tryX;
@@ -86,13 +93,13 @@ public class TornadoHelper {
                     int tryZ;
                     double dist;
                     for (k = yStart; k < yEnd; k += yInc) {
+                        if (this.tryRipCount > tryRipMax
+                            || this.tickGrabCount >= ConfigMisc.Storm_Tornado_maxBlocksGrabbedPerTick) {
+                            break;
+                        }
                         int randSize = k;
                         tryX = k / 4;
                         if (k <= 20 || rand.nextInt(2) == 0) {
-                            if (this.tryRipCount > tryRipMax) {
-                                break;
-                            }
-
                             float var10000 = (float) (this.storm.levelCurIntensityStage + 1);
                             var10001 = this.storm;
                             tryY = (int) ((var10000 - StormObject.levelStormIntensityFormingStartVal) * 5.0F);
@@ -101,10 +108,14 @@ public class TornadoHelper {
                                 tryZ = 1 + tryX / 2;
                             }
 
-                            for (int d0 = 0; d0 < tryZ && this.tryRipCount <= tryRipMax; ++d0) {
+                            for (int d0 = 0; d0 < tryZ && this.tryRipCount <= tryRipMax
+                                && this.tickGrabCount < ConfigMisc.Storm_Tornado_maxBlocksGrabbedPerTick; ++d0) {
                                 int tryY1 = (int) ((double) (spawnYOffset + randSize) - 1.5D);
                                 if (tryY1 > 255) {
                                     tryY1 = 255;
+                                }
+                                if (tryY1 < 1) {
+                                    continue;
                                 }
 
                                 int d2 = (int) this.storm.pos.xCoord + rand.nextInt(this.tornadoBaseSize + tryX)
@@ -115,38 +126,39 @@ public class TornadoHelper {
                                 double blockID = this.storm.pos.zCoord - (double) tryZ1;
                                 double dist1 = (double) MathHelper.sqrt_double(dist * dist + blockID * blockID);
                                 if (dist1 < (double) (this.tornadoBaseSize / 2 + tryX / 2)
-                                    && this.tryRipCount < tryRipMax) {
+                                    && this.tryRipCount < tryRipMax
+                                    && parWorld.blockExists(d2, tryY1, tryZ1)) {
                                     Block blockID1 = parWorld.getBlock(d2, tryY1, tryZ1);
-                                    boolean performed = false;
-                                    if (!CoroUtilBlock.isAir(blockID1)
-                                        && this.canGrab(parWorld, d2, tryY1, tryZ1, blockID1)) {
+                                    if (!CoroUtilBlock.isAir(blockID1)) {
                                         ++this.tryRipCount;
-                                        seesLight = this.tryRip(parWorld, d2, tryY1, tryZ1, true);
-                                        performed = seesLight;
-                                    }
-
-                                    if (!performed && ConfigMisc.Storm_Tornado_RefinedGrabRules
-                                        && blockID1 == Blocks.grass) {
-                                        parWorld.setBlock(d2, tryY1, tryZ1, Blocks.dirt);
+                                        if (this.canGrab(parWorld, d2, tryY1, tryZ1, blockID1)) {
+                                            seesLight = this.tryRip(parWorld, d2, tryY1, tryZ1, true);
+                                        }
                                     }
                                 }
                             }
                         }
                     }
 
-                    for (k = 0; k < 10; ++k) {
+                    for (k = 0; k < 10 && this.tryRipCount < tryRipMax
+                        && this.tickGrabCount < ConfigMisc.Storm_Tornado_maxBlocksGrabbedPerTick; ++k) {
                         byte var27 = 40;
                         tryX = (int) this.storm.pos.xCoord + rand.nextInt(var27) - 20;
                         tryY = spawnYOffset - 2 + rand.nextInt(8);
                         tryZ = (int) this.storm.pos.zCoord + rand.nextInt(var27) - 20;
+                        if (tryY < 1 || tryY > 255 || !parWorld.blockExists(tryX, tryY, tryZ)) {
+                            continue;
+                        }
                         double var28 = this.storm.pos.xCoord - (double) tryX;
                         double var29 = this.storm.pos.zCoord - (double) tryZ;
                         dist = (double) MathHelper.sqrt_double(var28 * var28 + var29 * var29);
                         if (dist < (double) (this.tornadoBaseSize / 2 + var27 / 2) && this.tryRipCount < tryRipMax) {
                             Block var30 = parWorld.getBlock(tryX, tryY, tryZ);
-                            if (!CoroUtilBlock.isAir(var30) && this.canGrab(parWorld, tryX, tryY, tryZ, var30)) {
+                            if (!CoroUtilBlock.isAir(var30)) {
                                 ++this.tryRipCount;
-                                this.tryRip(parWorld, tryX, tryY, tryZ, true);
+                                if (this.canGrab(parWorld, tryX, tryY, tryZ, var30)) {
+                                    this.tryRip(parWorld, tryX, tryY, tryZ, true);
+                                }
                             }
                         }
                     }

@@ -88,6 +88,8 @@ public class CommandWeather2 extends CommandBase {
                             ex.posX,
                             (double) ((Integer) StormObject.layers.get(var11.layer)).intValue(),
                             ex.posZ);
+                        var11.currentTopYBlock = Math.max(1, (int) ex.posY);
+                        var11.posGround = Vec3.createVectorHelper(ex.posX, (double) var11.currentTopYBlock, ex.posZ);
                         var11.levelWater = var11.levelWaterStartRaining * 2;
                         var11.attrib_precipitation = true;
                         if (!var2[2].equals("rain")) {

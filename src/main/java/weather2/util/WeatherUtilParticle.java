@@ -8,7 +8,6 @@ import net.minecraft.client.particle.EffectRenderer;
 import net.minecraft.client.particle.EntityFX;
 import net.minecraft.util.Vec3;
 
-import CoroUtil.OldUtil;
 import cpw.mods.fml.client.FMLClientHandler;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
@@ -26,14 +25,49 @@ public class WeatherUtilParticle {
     public static int maxRainDrops = 80;
     public static Vec3[] rainPositions = new Vec3[maxRainDrops];
 
+    private static Field particleAgeField;
+    private static boolean particleAgeFieldResolved = false;
+
+    private static Field getParticleAgeField() {
+        if (!particleAgeFieldResolved) {
+            particleAgeFieldResolved = true;
+            try {
+                particleAgeField = EntityFX.class.getDeclaredField("field_70546_d");
+                particleAgeField.setAccessible(true);
+            } catch (Throwable t1) {
+                try {
+                    particleAgeField = EntityFX.class.getDeclaredField("particleAge");
+                    particleAgeField.setAccessible(true);
+                } catch (Throwable ignored) {}
+            }
+        }
+        return particleAgeField;
+    }
+
     public static int getParticleAge(EntityFX ent) {
-        return OldUtil.getPrivateValueBoth(EntityFX.class, ent, "field_70546_d", "particleAge") != null
-            ? ((Integer) OldUtil.getPrivateValueBoth(EntityFX.class, ent, "field_70546_d", "particleAge")).intValue()
-            : 0;
+        if (ent instanceof EntityRotFX) {
+            return ((EntityRotFX) ent).getAge();
+        }
+        Field f = getParticleAgeField();
+        if (f != null && ent != null) {
+            try {
+                return f.getInt(ent);
+            } catch (Throwable ignored) {}
+        }
+        return 0;
     }
 
     public static void setParticleAge(EntityFX ent, int val) {
-        OldUtil.setPrivateValueBoth(EntityFX.class, ent, "field_70546_d", "particleAge", Integer.valueOf(val));
+        if (ent instanceof EntityRotFX) {
+            ((EntityRotFX) ent).setAge(val);
+            return;
+        }
+        Field f = getParticleAgeField();
+        if (f != null && ent != null) {
+            try {
+                f.setInt(ent, val);
+            } catch (Throwable ignored) {}
+        }
     }
 
     @SideOnly(Side.CLIENT)

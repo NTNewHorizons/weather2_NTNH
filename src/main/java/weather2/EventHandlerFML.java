@@ -6,7 +6,9 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.world.World;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+import cpw.mods.fml.common.gameevent.PlayerEvent.PlayerChangedDimensionEvent;
 import cpw.mods.fml.common.gameevent.PlayerEvent.PlayerLoggedInEvent;
+import cpw.mods.fml.common.gameevent.PlayerEvent.PlayerRespawnEvent;
 import cpw.mods.fml.common.gameevent.TickEvent.ClientTickEvent;
 import cpw.mods.fml.common.gameevent.TickEvent.Phase;
 import cpw.mods.fml.common.gameevent.TickEvent.RenderTickEvent;
@@ -15,6 +17,7 @@ import cpw.mods.fml.common.gameevent.TickEvent.WorldTickEvent;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 import weather2.client.SceneEnhancer;
+import weather2.util.WeatherUtilConfig;
 
 public class EventHandlerFML {
 
@@ -51,7 +54,11 @@ public class EventHandlerFML {
             ClientProxy.clientTickHandler.onRenderScreenTick();
         } else if (event.phase == Phase.START) {
             Minecraft mc = Minecraft.getMinecraft();
-            if (mc != null && mc.thePlayer != null && mc.theWorld != null) {
+            if (mc != null && mc.thePlayer != null
+                && mc.theWorld != null
+                && mc.theWorld.provider != null
+                && WeatherUtilConfig.listDimensionsWeather
+                    .contains(Integer.valueOf(mc.theWorld.provider.dimensionId))) {
                 EntityClientPlayerMP entP = mc.thePlayer;
                 float curRainStr = SceneEnhancer.getRainStrengthAndControlVisuals(entP, true);
                 curRainStr = Math.abs(curRainStr);
@@ -63,7 +70,23 @@ public class EventHandlerFML {
 
     @SubscribeEvent
     public void playerLoggedIn(PlayerLoggedInEvent event) {
-        ServerTickHandler.playerJoinedServerSyncFull((EntityPlayerMP) event.player);
+        if (event.player instanceof EntityPlayerMP) {
+            ServerTickHandler.playerJoinedServerSyncFull((EntityPlayerMP) event.player);
+        }
+    }
+
+    @SubscribeEvent
+    public void playerChangedDimension(PlayerChangedDimensionEvent event) {
+        if (event.player instanceof EntityPlayerMP) {
+            ServerTickHandler.playerJoinedServerSyncFull((EntityPlayerMP) event.player);
+        }
+    }
+
+    @SubscribeEvent
+    public void playerRespawn(PlayerRespawnEvent event) {
+        if (event.player instanceof EntityPlayerMP) {
+            ServerTickHandler.playerJoinedServerSyncFull((EntityPlayerMP) event.player);
+        }
     }
 
 }

@@ -6,7 +6,6 @@ import net.minecraft.world.World;
 import cpw.mods.fml.client.FMLClientHandler;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
-import weather2.ClientTickHandler;
 import weather2.Weather;
 import weather2.entity.EntityLightningBolt;
 import weather2.volcano.VolcanoObject;
@@ -20,8 +19,9 @@ public class WeatherManagerClient extends WeatherManagerBase {
     }
 
     public World getWorld() {
-        return FMLClientHandler.instance()
-            .getClient().theWorld;
+        net.minecraft.client.Minecraft mc = FMLClientHandler.instance()
+            .getClient();
+        return mc != null ? mc.theWorld : null;
     }
 
     public void tick() {
@@ -33,9 +33,15 @@ public class WeatherManagerClient extends WeatherManagerBase {
         NBTTagCompound nbt;
         if (command.equals("syncStormNew")) {
             nbt = parNBT.getCompoundTag("data");
-            StormObject posXS = new StormObject(ClientTickHandler.weatherManager);
-            posXS.nbtSyncFromServer(nbt);
-            this.addStormObject(posXS);
+            long id = nbt.getLong("ID");
+            StormObject existing = (StormObject) this.lookupStormObjectsByID.get(Long.valueOf(id));
+            if (existing != null) {
+                existing.nbtSyncFromServer(nbt);
+            } else {
+                StormObject posXS = new StormObject(this);
+                posXS.nbtSyncFromServer(nbt);
+                this.addStormObject(posXS);
+            }
         } else {
             long var15;
             if (command.equals("syncStormRemove")) {
@@ -54,6 +60,10 @@ public class WeatherManagerClient extends WeatherManagerBase {
                     StormObject posX = (StormObject) this.lookupStormObjectsByID.get(Long.valueOf(posYS));
                     if (posX != null) {
                         posX.nbtSyncFromServer(var16);
+                    } else if (!var16.getBoolean("isDead")) {
+                        posX = new StormObject(this);
+                        posX.nbtSyncFromServer(var16);
+                        this.addStormObject(posX);
                     } else {
                         Weather.dbg("error syncing storm, cant find by ID: " + posYS);
                     }
@@ -61,7 +71,7 @@ public class WeatherManagerClient extends WeatherManagerBase {
             } else if (command.equals("syncVolcanoNew")) {
                 Weather.dbg("creating client side volcano");
                 nbt = parNBT.getCompoundTag("data");
-                VolcanoObject var17 = new VolcanoObject(ClientTickHandler.weatherManager);
+                VolcanoObject var17 = new VolcanoObject(this);
                 var17.nbtSyncFromServer(nbt);
                 this.addVolcanoObject(var17);
             } else {

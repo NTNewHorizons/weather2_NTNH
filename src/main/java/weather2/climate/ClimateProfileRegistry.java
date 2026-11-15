@@ -38,16 +38,17 @@ public class ClimateProfileRegistry {
      * Registers canonical built-in defaults for known NTNH dimensions.
      */
     public static synchronized void registerDefaults() {
-        // Overworld (Earth, Dim 0): Localized early threat (F1 max, selective fragile grab only, calm 0.25x lightning)
+        // Overworld (Earth, Dim 0): Rare atmospheric threat (~3h cooldown, F1 max, selective fragile grab only, calm
+        // 0.25x lightning)
         register(
             ClimateProfile.builder("overworld")
                 .dim(ClimateEngine.DIM_OVERWORLD)
                 .weatherEnabled(true)
                 .exactStage(5) // F1 max (STATE_STAGE1)
                 .alwaysProgresses(false)
-                .deadlyCooldown(3600)
+                .deadlyCooldown(216000)
                 .lightningMultiplier(0.25F)
-                .spawnOdds(25, 0)
+                .spawnOdds(100, 0)
                 .grabBlocks(true)
                 .build());
 

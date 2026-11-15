@@ -78,10 +78,15 @@ public class ClimateRegistryTest {
             "Overworld maxStage should be 5 (F1 localized threat) even after config load",
             5,
             overworld.maxStage);
+        assertEquals("Overworld deadlyCooldown must be 216000 (3h real time)", 216000, overworld.deadlyCooldown);
+        assertEquals("Overworld landSpawnOdds must be 100", 100, overworld.landSpawnOdds);
         assertTrue("Overworld grabBlocks must be true for selective grab", overworld.grabBlocks);
         assertTrue(
             "Overworld grab should be allowed in registry for selective grab",
             ClimateProfileRegistry.isGrabAllowed(0));
+        assertFalse(
+            "Tornado player-homing must be disabled by default across all dimensions",
+            weather2.config.ConfigMisc.Storm_Tornado_aimAtPlayerOnSpawn);
 
         // Duna (dim 16)
         ClimateProfile duna = ClimateProfileRegistry.get(16);
@@ -204,5 +209,41 @@ public class ClimateRegistryTest {
             "Eve lightning odds (6.0x) must be 33",
             33,
             weather2.climate.ClimateEngine.getAdjustedLightningOdds(200, eveStorm));
+    }
+
+    @Test
+    public void testStormClientSyncPreservesFunnelHeightAndStageAfterIMCAndSave() {
+        weather2.weathersystem.storm.StormObject serverStorm = weather2.harness.MockStormFactory.create(5, 42L, 0);
+        serverStorm.pos = net.minecraft.util.Vec3.createVectorHelper(120.0D, 200.0D, -340.0D);
+        serverStorm.size = 180;
+        serverStorm.maxSize = 300;
+        serverStorm.currentTopYBlock = 68;
+        serverStorm.attrib_precipitation = true;
+
+        // Prime initial client sync cache
+        serverStorm.nbtSyncForClient();
+
+        // Simulate stage progression to F2 (stage 6), followed by IMC & world save BEFORE next client update packet
+        serverStorm.levelCurIntensityStage = weather2.weathersystem.storm.StormObject.STATE_STAGE2;
+        serverStorm.nbtForIMC();
+        serverStorm.writeToNBT();
+
+        // Client update packet must still carry stage, posY=200, size, and currentTopYBlock
+        net.minecraft.nbt.NBTTagCompound updatePkt = new net.minecraft.nbt.NBTTagCompound();
+        updatePkt.setString("command", "syncStormUpdate");
+        updatePkt.setInteger("stormCount", 1);
+        updatePkt.setTag("storm0", serverStorm.nbtSyncForClient());
+
+        // Even if WeatherManagerClient did not have storm 42L (e.g. after respawn), syncStormUpdate must reconstruct it
+        weather2.weathersystem.WeatherManagerClient wmClient = new weather2.weathersystem.WeatherManagerClient(0);
+        wmClient.nbtSyncFromServer(updatePkt);
+
+        weather2.weathersystem.storm.StormObject clientStorm = (weather2.weathersystem.storm.StormObject) wmClient.lookupStormObjectsByID
+            .get(Long.valueOf(42L));
+        assertNotNull("Client must reconstruct active storm on syncStormUpdate", clientStorm);
+        assertEquals("Client storm stage must match server stage 6", 6, clientStorm.levelCurIntensityStage);
+        assertEquals("Client storm posY must be 200 (never 0)", 200.0D, clientStorm.pos.yCoord, 0.01D);
+        assertEquals("Client storm size must be 180", 180, clientStorm.size);
+        assertEquals("Client storm currentTopYBlock must be 68", 68, clientStorm.currentTopYBlock);
     }
 }
